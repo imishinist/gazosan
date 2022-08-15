@@ -13,13 +13,32 @@
 
 #include <cstdlib>
 #include <unistd.h>
+#include <sys/fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/features2d.hpp>
 
 namespace gazosan {
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+
+std::string_view errno_string();
 
 template <typename C>
 class SyncOut {
 public:
-    SyncOut(C &ctx, std::ostream &out = std::cout) : out(out) {}
+    explicit SyncOut(C &ctx, std::ostream &out = std::cout) : out(out) {}
 
     ~SyncOut() {
         std::scoped_lock lock(mu);
@@ -48,7 +67,7 @@ static std::string add_color(C &ctx, std::string msg) {
 template <typename C>
 class Fatal {
 public:
-    Fatal(C &ctx) : out(ctx, std::cerr) {
+    explicit Fatal(C &ctx) : out(ctx, std::cerr) {
         out << add_color(ctx, "fatal");
     }
 
@@ -65,6 +84,67 @@ private:
     SyncOut<C> out;
 };
 
+template <typename C>
+class MappedFile {
+public:
+    static MappedFile *open(C &ctx, const std::string& path);
+    static MappedFile *must_open(C &ctx, std::string path);
+
+    ~MappedFile();
+
+    std::string_view get_contents() {
+        return std::string_view((char *) data, size);
+    }
+
+    std::string name;
+    u8 *data = nullptr;
+    i64 size = 0;
+    i64 mtime = 0;
+};
+
+template <typename C>
+MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
+    int fd;
+    fd = ::open(path.c_str(), O_RDONLY);
+
+    if (fd == -1) {
+        return nullptr;
+    }
+
+    struct stat st{};
+    if (fstat(fd, &st) == -1)
+        Fatal(ctx) << path << ": fstat failed: " << errno_string();
+
+    auto *mf = new MappedFile;
+    mf->name = path;
+    mf->size = st.st_size;
+    mf->mtime = (u64)st.st_mtimespec.tv_sec * 1000000000 + st.st_mtimespec.tv_nsec;
+    if (st.st_size > 0) {
+        mf->data = (u8 *)mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (mf->data == MAP_FAILED)
+            Fatal(ctx) << path << ": mmap failed: " << errno_string();
+    }
+    close(fd);
+    return mf;
+}
+
+template <typename C>
+MappedFile<C> *MappedFile<C>::must_open(C &ctx, std::string path) {
+    if (MappedFile *mf = MappedFile::open(ctx, path)) {
+        return mf;
+    }
+    Fatal(ctx) << "cannot open " << path << ": " << errno_string();
+}
+
+template <typename C>
+MappedFile<C>::~MappedFile() {
+    if (size == 0)
+        return;
+
+    munmap(data, size);
+}
+
+
 typedef struct Context {
     Context() = default;
 
@@ -77,9 +157,14 @@ typedef struct Context {
         std::string output_name;
     } arg;
     std::vector<std::string_view> cmdline_args;
+
+    std::unique_ptr<MappedFile<Context>> new_file;
+    std::unique_ptr<MappedFile<Context>> old_file;
 } Context;
 
 
 void parse_args(Context &ctx);
+void load_image(Context &ctx);
+std::variant<bool, std::string> check_histogram_differential(Context &ctx);
 
 } // namespace gazosan
