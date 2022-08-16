@@ -15,9 +15,8 @@ void load_image(Context &ctx) {
     }
 }
 
-static inline
-cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file) {
-    return cv::imdecode(cv::Mat(1, mapped_file.size, CV_8UC1, mapped_file.data), cv::IMREAD_UNCHANGED);
+cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags = cv::IMREAD_UNCHANGED) {
+    return cv::imdecode(cv::Mat(1, mapped_file.size, CV_8UC1, mapped_file.data), flags);
 }
 
 std::variant<bool, std::string>

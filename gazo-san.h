@@ -6,6 +6,9 @@
 
 #include <iostream>
 #include <vector>
+#include <optional>
+#include <queue>
+#include <stack>
 #include <string>
 #include <string_view>
 #include <sstream>
@@ -155,6 +158,8 @@ typedef struct Context {
         std::string new_file;
         std::string old_file;
         std::string output_name;
+
+        i32 bin_threshold = 200;
     } arg;
     std::vector<std::string_view> cmdline_args;
 
@@ -165,6 +170,7 @@ typedef struct Context {
 
 void parse_args(Context &ctx);
 void load_image(Context &ctx);
+cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags);
 std::variant<bool, std::string> check_histogram_differential(Context &ctx);
 
 } // namespace gazosan

@@ -11,6 +11,7 @@ Options:
   -new <FILE>                 new image file path
   -old <FILE>                 old image file path
   -o, --output <NAME>         output prefix name (default: diff)
+  -threshold <NUMBER>         binary threshold
 
   -h, --help                  report usage information
 )";
@@ -52,6 +53,8 @@ void parse_args(Context &ctx) {
             ctx.arg.new_file = arg;
         } else if (read_arg("-old")) {
             ctx.arg.old_file = arg;
+        } else if (read_arg("-threshold")) {
+            ctx.arg.bin_threshold = std::stoi(std::string(arg));
         } else if (read_arg("-o") || read_arg("--output")) {
             ctx.arg.output_name = arg;
         } else {
@@ -64,6 +67,8 @@ void parse_args(Context &ctx) {
         Fatal(ctx) << "\"-new\" option is required";
     if (ctx.arg.old_file.empty())
         Fatal(ctx) << "\"-old\" option is required";
+    if (ctx.arg.bin_threshold == 0)
+        ctx.arg.bin_threshold = 200;
     if (ctx.arg.output_name.empty()) {
         ctx.arg.output_name = "diff";
     }
