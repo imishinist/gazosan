@@ -166,6 +166,12 @@ typedef struct Context {
 
     std::unique_ptr<MappedFile<Context>> new_file;
     std::unique_ptr<MappedFile<Context>> old_file;
+
+    std::vector<cv::Rect> new_segments;
+    std::vector<cv::Rect> old_segments;
+
+    std::vector<std::optional<cv::Mat>> new_cropped_descriptors;
+    std::vector<std::optional<cv::Mat>> old_cropped_descriptors;
 } Context;
 
 

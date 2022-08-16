@@ -110,11 +110,10 @@ split_segments(const MappedFile<Context>& mapped_file, i32 threshold) {
     return segments;
 }
 
-bool is_match(const cv::Mat& img1, const cv::Mat& img2) {
-    auto algorithm = cv::AKAZE::create();
-    auto matcher = cv::DescriptorMatcher::create("FlannBased");
-
-    auto compute_descriptor = [&](const cv::Mat& img) -> std::optional<cv::Mat> {
+template <typename A>
+std::vector<std::optional<cv::Mat>>
+load_descriptors(const cv::Ptr<A>& algorithm, const cv::Mat& img, const std::vector<cv::Rect>& crops) {
+    auto compute_descriptor = [&algorithm](const cv::Mat& img) -> std::optional<cv::Mat> {
         if (img.empty()) return std::nullopt;
 
         std::vector<cv::KeyPoint> keypoint;
@@ -126,16 +125,19 @@ bool is_match(const cv::Mat& img1, const cv::Mat& img2) {
         descriptor.convertTo(descriptor, CV_32F);
         return descriptor;
     };
+    std::vector<std::optional<cv::Mat>> ret;
+    for (auto crop : crops)
+        ret.push_back(compute_descriptor(img(crop)));
 
-    auto descriptor1 = compute_descriptor(img1);
-    auto descriptor2 = compute_descriptor(img2);
+    return ret;
+}
 
-    if (!descriptor1 || !descriptor2)
-        return false;
+bool is_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
+    auto matcher = cv::DescriptorMatcher::create("FlannBased");
 
     std::vector<cv::DMatch> matched, match12, match21;
-    matcher->match(*descriptor1, *descriptor2, match12);
-    matcher->match(*descriptor2, *descriptor1, match21);
+    matcher->match(descriptor1, descriptor2, match12);
+    matcher->match(descriptor2, descriptor1, match21);
 
     for (auto forward : match12) {
         cv::DMatch backward = match21[forward.trainIdx];
@@ -145,25 +147,6 @@ bool is_match(const cv::Mat& img1, const cv::Mat& img2) {
 
     std::sort(matched.begin(), matched.end());
     return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
-}
-
-std::vector<std::pair<cv::Rect, cv::Rect>>
-match_segments (const cv::Mat& img1, const std::vector<cv::Rect>& segments1, const cv::Mat& img2, const std::vector<cv::Rect>& segments2) {
-    std::vector<std::pair<cv::Rect, cv::Rect>> pairs;
-
-    std::accumulate(segments1.cbegin(), segments1.cend(), 0, [&](int i1, cv::Rect seg1) -> int {
-        auto cropped1 = img1(seg1);
-
-        std::accumulate(segments2.cbegin(), segments2.cend(), 0, [&](int i2, cv::Rect seg2) -> int {
-            auto cropped2 = img2(seg2);
-            if (is_match(cropped1, cropped2))
-                pairs.emplace_back(seg1, seg2);
-
-            return i2 + 1;
-        });
-        return i1 + 1;
-    });
-    return pairs;
 }
 
 int main(int argc, char **argv) {
@@ -184,15 +167,36 @@ int main(int argc, char **argv) {
         Fatal(ctx) << "two images are same";
     }
 
-    auto old_segments = split_segments(*ctx.old_file, ctx.arg.bin_threshold);
-    auto new_segments = split_segments(*ctx.new_file, ctx.arg.bin_threshold);
-
     cv::Mat old_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_GRAYSCALE);
     cv::Mat new_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_GRAYSCALE);
 
-    auto pairs = match_segments(old_mat, old_segments, new_mat, new_segments);
-    for (auto p : pairs) {
-        std::cout << p.first << " " << p.second << std::endl;
+    puts("split segments(binarization, morphology, grouping labels)");
+    auto algorithm = cv::AKAZE::create();
+    ctx.old_segments = split_segments(*ctx.old_file, ctx.arg.bin_threshold);
+    ctx.new_segments = split_segments(*ctx.new_file, ctx.arg.bin_threshold);
+
+    puts("load cropped descriptors");
+    ctx.old_cropped_descriptors = load_descriptors(algorithm, old_mat, ctx.old_segments);
+    ctx.new_cropped_descriptors = load_descriptors(algorithm, new_mat, ctx.new_segments);
+
+    puts("matching crop image");
+    for (int i1 = 0; const auto& desc1 : ctx.old_cropped_descriptors) {
+        i1++;
+        if (!desc1)
+            continue;
+        printf("Old %d\n", i1);
+
+        for (int i2 = 0; const auto& desc2 : ctx.new_cropped_descriptors) {
+            i2++;
+            if (!desc2)
+                continue;
+
+            if (is_match(*desc1, *desc2)) {
+                printf("  New %d\n", i2);
+                puts("    Matched");
+                break;
+            }
+        }
     }
 
     return 0;
