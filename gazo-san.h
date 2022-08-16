@@ -5,14 +5,15 @@
 #pragma once
 
 #include <iostream>
-#include <vector>
+#include <mutex>
+#include <numeric>
 #include <optional>
 #include <queue>
 #include <stack>
 #include <string>
 #include <string_view>
 #include <sstream>
-#include <mutex>
+#include <vector>
 
 #include <cstdlib>
 #include <unistd.h>

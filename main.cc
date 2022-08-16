@@ -110,6 +110,62 @@ split_segments(const MappedFile<Context>& mapped_file, i32 threshold) {
     return segments;
 }
 
+bool is_match(const cv::Mat& img1, const cv::Mat& img2) {
+    auto algorithm = cv::AKAZE::create();
+    auto matcher = cv::DescriptorMatcher::create("FlannBased");
+
+    auto compute_descriptor = [&](const cv::Mat& img) -> std::optional<cv::Mat> {
+        if (img.empty()) return std::nullopt;
+
+        std::vector<cv::KeyPoint> keypoint;
+        cv::Mat descriptor;
+        algorithm->detect(img, keypoint);
+        if (keypoint.empty()) return std::nullopt;
+
+        algorithm->compute(img, keypoint, descriptor);
+        descriptor.convertTo(descriptor, CV_32F);
+        return descriptor;
+    };
+
+    auto descriptor1 = compute_descriptor(img1);
+    auto descriptor2 = compute_descriptor(img2);
+
+    if (!descriptor1 || !descriptor2)
+        return false;
+
+    std::vector<cv::DMatch> matched, match12, match21;
+    matcher->match(*descriptor1, *descriptor2, match12);
+    matcher->match(*descriptor2, *descriptor1, match21);
+
+    for (auto forward : match12) {
+        cv::DMatch backward = match21[forward.trainIdx];
+        if (backward.trainIdx == forward.queryIdx)
+            matched.push_back(forward);
+    }
+
+    std::sort(matched.begin(), matched.end());
+    return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
+}
+
+std::vector<std::pair<cv::Rect, cv::Rect>>
+match_segments (const cv::Mat& img1, const std::vector<cv::Rect>& segments1, const cv::Mat& img2, const std::vector<cv::Rect>& segments2) {
+    std::vector<std::pair<cv::Rect, cv::Rect>> pairs;
+
+    std::accumulate(segments1.cbegin(), segments1.cend(), 0, [&](int i1, cv::Rect seg1) -> int {
+        auto cropped1 = img1(seg1);
+
+        std::accumulate(segments2.cbegin(), segments2.cend(), 0, [&](int i2, cv::Rect seg2) -> int {
+            auto cropped2 = img2(seg2);
+            if (is_match(cropped1, cropped2))
+                pairs.emplace_back(seg1, seg2);
+
+            return i2 + 1;
+        });
+        return i1 + 1;
+    });
+    return pairs;
+}
+
 int main(int argc, char **argv) {
     Context ctx;
     for (int i = 0; i < argc; i++)
@@ -128,12 +184,16 @@ int main(int argc, char **argv) {
         Fatal(ctx) << "two images are same";
     }
 
-    auto segments = split_segments(*ctx.old_file, ctx.arg.bin_threshold);
-    cv::Mat color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
-    for (auto segment : segments) {
-        cv::rectangle(color_mat, segment, cv::Scalar(255, 0, 0), 2, 8);
+    auto old_segments = split_segments(*ctx.old_file, ctx.arg.bin_threshold);
+    auto new_segments = split_segments(*ctx.new_file, ctx.arg.bin_threshold);
+
+    cv::Mat old_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_GRAYSCALE);
+    cv::Mat new_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_GRAYSCALE);
+
+    auto pairs = match_segments(old_mat, old_segments, new_mat, new_segments);
+    for (auto p : pairs) {
+        std::cout << p.first << " " << p.second << std::endl;
     }
-    cv::imwrite("old_segments.png", color_mat);
 
     return 0;
 }
