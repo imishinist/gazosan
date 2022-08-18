@@ -27,13 +27,10 @@ int main(int argc, char **argv) {
         Fatal(ctx) << "two images are same";
     }
 
-    cv::Mat old_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_GRAYSCALE);
-    cv::Mat new_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_GRAYSCALE);
-
     detect_segments(ctx);
     // save_segments(ctx);
 
-    create_diff_image(ctx, old_mat, new_mat);
+    create_diff_image(ctx);
 
     t_all.stop();
     if (ctx.arg.perf)

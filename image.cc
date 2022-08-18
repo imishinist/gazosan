@@ -58,12 +58,11 @@ check_histogram_differential(Context &ctx) {
     return cv::compareHist(hist_old_mat, hist_new_mat, 1) - 0.00001 <= 1e-13;
 }
 
-std::vector<cv::Rect> split_segments(Context& ctx, const MappedFile<Context>& mapped_file, i32 threshold) {
+std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, const cv::Mat& color_mat, i32 threshold) {
     Timer t(ctx, "split segments");
 
     // binarization
     cv::Mat bin_mat;
-    cv::Mat gray_mat = decode_from_mapped_file(mapped_file, cv::IMREAD_GRAYSCALE);
     cv::threshold(gray_mat, bin_mat, threshold, 255, cv::THRESH_BINARY);
 
     // morphology
@@ -105,7 +104,6 @@ std::vector<cv::Rect> split_segments(Context& ctx, const MappedFile<Context>& ma
     }
     markers = markers + 1;
     // "watershed" regard 0 as unknown, so set un-labeled area to 1
-    cv::Mat color_mat = decode_from_mapped_file(mapped_file, cv::IMREAD_COLOR);
     cv::watershed(color_mat, markers);
 
     // overwrite markers
@@ -179,21 +177,20 @@ void detect_segments(Context &ctx) {
         return descriptor;
     };
 
-    auto do_detect = [&](const MappedFile<Context>& file, std::vector<ImageSegment>& result) {
+    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, std::vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect");
-        cv::Mat mat = decode_from_mapped_file(file, cv::IMREAD_GRAYSCALE);
-        auto segments = split_segments(ctx, file, ctx.arg.bin_threshold);
+        auto segments = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
 
         Timer t3(ctx, "compute descriptor each segments");
         for (auto segment : segments) {
-            if (auto desc = compute_descriptor(mat(segment)))
+            if (auto desc = compute_descriptor(gray_mat(segment)))
                 result.emplace_back(segment, *desc);
         }
         t3.stop();
     };
 
-    do_detect(*ctx.old_file, ctx.old_segments);
-    do_detect(*ctx.new_file, ctx.new_segments);
+    do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
+    do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments);
 }
 
 void save_segments(Context &ctx) {
@@ -228,7 +225,7 @@ bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& d
     return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
 }
 
-void create_diff_image(Context& ctx, const cv::Mat& old_mat, const cv::Mat& new_mat) {
+void create_diff_image(Context& ctx) {
     Timer t(ctx, "create diff image");
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
@@ -240,7 +237,7 @@ void create_diff_image(Context& ctx, const cv::Mat& old_mat, const cv::Mat& new_
             // find `new` parts from `old` image
             cv::Mat ret;
             cv::Point min_point;
-            cv::matchTemplate(old_mat, new_mat(image_segment2.area), ret, cv::TM_SQDIFF);
+            cv::matchTemplate(ctx.old_gray_mat, ctx.new_gray_mat(image_segment2.area), ret, cv::TM_SQDIFF);
             cv::minMaxLoc(ret, nullptr, nullptr, &min_point, nullptr);
             // Note: パーツのマッチングから対応する位置関係を取得できないか？
 

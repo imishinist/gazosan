@@ -241,6 +241,6 @@ std::variant<bool, std::string> check_histogram_differential(Context &ctx);
 void detect_segments(Context &ctx);
 void save_segments(Context &ctx);
 bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2);
-void create_diff_image(Context& ctx, const cv::Mat& old_mat, const cv::Mat& new_mat);
+void create_diff_image(Context& ctx);
 
 } // namespace gazosan
