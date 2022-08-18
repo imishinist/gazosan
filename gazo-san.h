@@ -89,6 +89,45 @@ private:
     SyncOut<C> out;
 };
 
+struct TimerRecord {
+    TimerRecord(std::string name, TimerRecord *parent = nullptr);
+    void stop();
+
+    std::string name;
+    TimerRecord *parent;
+    std::vector<TimerRecord *> children;
+    i64 start;
+    i64 end;
+    i64 user;
+    i64 sys;
+    bool stopped = false;
+};
+
+void print_timer_records(std::vector<std::unique_ptr<TimerRecord>> &);
+
+template <typename C>
+class Timer {
+public:
+    Timer(C &ctx, std::string name, Timer *parent = nullptr) {
+        record = new TimerRecord(name, parent ? parent->record : nullptr);
+        ctx.timer_records.push_back(std::unique_ptr<TimerRecord>(record));
+    }
+
+    Timer(const Timer &) = delete;
+
+    ~Timer() {
+        record->stop();
+    }
+
+    void stop() {
+        record->stop();
+    }
+
+private:
+    TimerRecord *record;
+};
+
+
 template <typename C>
 class MappedFile {
 public:
@@ -172,8 +211,11 @@ typedef struct Context {
         std::string output_name;
 
         i32 bin_threshold = 200;
+
+        bool perf = false;
     } arg;
     std::vector<std::string_view> cmdline_args;
+    std::vector<std::unique_ptr<TimerRecord>> timer_records;
 
     cv::Ptr<cv::AKAZE> algorithm = cv::AKAZE::create();
 
@@ -198,6 +240,7 @@ std::variant<bool, std::string> check_histogram_differential(Context &ctx);
 
 void detect_segments(Context &ctx);
 void save_segments(Context &ctx);
-bool descriptor_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2);
+bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2);
+void create_diff_image(Context& ctx, const cv::Mat& old_mat, const cv::Mat& new_mat);
 
 } // namespace gazosan

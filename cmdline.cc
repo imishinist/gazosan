@@ -12,11 +12,14 @@ Options:
   -old <FILE>                 old image file path
   -o, --output <NAME>         output prefix name (default: diff)
   -threshold <NUMBER>         binary threshold
+  --perf                      Print performance statistics
+
 
   -h, --help                  report usage information
 )";
 
 void parse_args(Context &ctx) {
+    Timer t(ctx, "parse args");
     std::vector<std::string_view> &args = ctx.cmdline_args;
 
     int i = 1;
@@ -57,6 +60,8 @@ void parse_args(Context &ctx) {
             ctx.arg.bin_threshold = std::stoi(std::string(arg));
         } else if (read_arg("-o") || read_arg("--output")) {
             ctx.arg.output_name = arg;
+        } else if (read_flag("-perf")) {
+            ctx.arg.perf = true;
         } else {
             if (args[i][0] == '-')
                 Fatal(ctx) << "unknown command line option: " << args[i];

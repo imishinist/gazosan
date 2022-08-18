@@ -7,7 +7,7 @@ include_directories(.)
 
 add_executable(gazo-san
         gazo-san.h
-        main.cc cmdline.cc strerror.cc image.cc)
+        main.cc cmdline.cc strerror.cc image.cc perf.cc)
 
 find_package(OpenCV REQUIRED)
 if (OpenCV_FOUND)

@@ -11,6 +11,8 @@ cv::Rect ImageSegment::rect_from(const cv::Point &upper_left) const {
 }
 
 void load_image(Context &ctx) {
+    Timer t(ctx, "load image");
+
     if (!ctx.arg.new_file.empty()) {
         ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
         ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
@@ -29,7 +31,10 @@ cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flag
 
 std::variant<bool, std::string>
 check_histogram_differential(Context &ctx) {
-    auto preprocess_image = [](const cv::Mat& color_mat) {
+    Timer t(ctx, "check histogram differential");
+
+    auto preprocess_image = [&](const cv::Mat& color_mat) {
+        Timer t2(ctx, "preprocess image");
         cv::Mat hsv_mat, output;
         cv::cvtColor(color_mat, hsv_mat, cv::COLOR_BGR2HSV);
 
@@ -53,7 +58,9 @@ check_histogram_differential(Context &ctx) {
     return cv::compareHist(hist_old_mat, hist_new_mat, 1) - 0.00001 <= 1e-13;
 }
 
-std::vector<cv::Rect> split_segments(const MappedFile<Context>& mapped_file, i32 threshold) {
+std::vector<cv::Rect> split_segments(Context& ctx, const MappedFile<Context>& mapped_file, i32 threshold) {
+    Timer t(ctx, "split segments");
+
     // binarization
     cv::Mat bin_mat;
     cv::Mat gray_mat = decode_from_mapped_file(mapped_file, cv::IMREAD_GRAYSCALE);
@@ -157,6 +164,8 @@ std::vector<cv::Rect> split_segments(const MappedFile<Context>& mapped_file, i32
 }
 
 void detect_segments(Context &ctx) {
+    Timer t(ctx, "detect segments");
+
     auto compute_descriptor = [&ctx](const cv::Mat& img) -> std::optional<cv::Mat> {
         if (img.empty()) return std::nullopt;
 
@@ -171,12 +180,16 @@ void detect_segments(Context &ctx) {
     };
 
     auto do_detect = [&](const MappedFile<Context>& file, std::vector<ImageSegment>& result) {
+        Timer t2(ctx, "do detect");
         cv::Mat mat = decode_from_mapped_file(file, cv::IMREAD_GRAYSCALE);
-        for (int i = 0; auto segment : split_segments(file, ctx.arg.bin_threshold)) {
-            i++;
+        auto segments = split_segments(ctx, file, ctx.arg.bin_threshold);
+
+        Timer t3(ctx, "compute descriptor each segments");
+        for (auto segment : segments) {
             if (auto desc = compute_descriptor(mat(segment)))
                 result.emplace_back(segment, *desc);
         }
+        t3.stop();
     };
 
     do_detect(*ctx.old_file, ctx.old_segments);
@@ -198,7 +211,7 @@ void save_segments(Context &ctx) {
 }
 
 
-bool descriptor_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
+bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
     auto matcher = cv::DescriptorMatcher::create("FlannBased");
 
     std::vector<cv::DMatch> matched, match12, match21;
@@ -213,6 +226,41 @@ bool descriptor_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
 
     std::sort(matched.begin(), matched.end());
     return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
+}
+
+void create_diff_image(Context& ctx, const cv::Mat& old_mat, const cv::Mat& new_mat) {
+    Timer t(ctx, "create diff image");
+
+    cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+    for (const auto& image_segment1 : ctx.old_segments) {
+        for (const auto& image_segment2 : ctx.new_segments) {
+            if (!descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
+                continue;
+
+            // find `new` parts from `old` image
+            cv::Mat ret;
+            cv::Point min_point;
+            cv::matchTemplate(old_mat, new_mat(image_segment2.area), ret, cv::TM_SQDIFF);
+            cv::minMaxLoc(ret, nullptr, nullptr, &min_point, nullptr);
+            // Note: パーツのマッチングから対応する位置関係を取得できないか？
+
+            auto rect = image_segment2.rect_from(min_point);
+            cv::rectangle(result, rect, CV_RGB(255, 0, 0), 1);
+            for (int i = 0; i < rect.height; i++) {
+                for (int j = 0; j < rect.width; j++) {
+                    auto old_cropped = ctx.old_color_mat.at<cv::Vec3b>(i + rect.y, j + rect.x);
+                    auto new_cropped = ctx.new_color_mat.at<cv::Vec3b>(i + image_segment2.area.y, j + image_segment2.area.x);
+
+                    if (old_cropped != new_cropped) {
+                        result.at<cv::Vec3b>(i + rect.y, j + rect.x) = cv::Vec3b(0, 0, 255);
+                    }
+                }
+            }
+
+            break;
+        }
+    }
+    cv::imwrite("/tmp/foo.png", result);
 }
 
 
