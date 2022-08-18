@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include <cstdlib>
@@ -148,6 +149,16 @@ MappedFile<C>::~MappedFile() {
     munmap(data, size);
 }
 
+class ImageSegment {
+public:
+    cv::Rect area;
+    cv::Mat descriptor;
+
+    ImageSegment(cv::Rect area, cv::Mat descriptor): area(area), descriptor(std::move(descriptor)) {};
+
+    cv::Rect rect_from(const cv::Point& upper_left) const;
+};
+
 
 typedef struct Context {
     Context() = default;
@@ -164,14 +175,19 @@ typedef struct Context {
     } arg;
     std::vector<std::string_view> cmdline_args;
 
+    cv::Ptr<cv::AKAZE> algorithm = cv::AKAZE::create();
+
     std::unique_ptr<MappedFile<Context>> new_file;
     std::unique_ptr<MappedFile<Context>> old_file;
 
-    std::vector<cv::Rect> new_segments;
-    std::vector<cv::Rect> old_segments;
+    cv::Mat new_color_mat;
+    cv::Mat old_color_mat;
 
-    std::vector<std::optional<cv::Mat>> new_cropped_descriptors;
-    std::vector<std::optional<cv::Mat>> old_cropped_descriptors;
+    cv::Mat new_gray_mat;
+    cv::Mat old_gray_mat;
+
+    std::vector<ImageSegment> new_segments;
+    std::vector<ImageSegment> old_segments;
 } Context;
 
 
@@ -179,5 +195,9 @@ void parse_args(Context &ctx);
 void load_image(Context &ctx);
 cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags);
 std::variant<bool, std::string> check_histogram_differential(Context &ctx);
+
+void detect_segments(Context &ctx);
+void save_segments(Context &ctx);
+bool descriptor_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2);
 
 } // namespace gazosan

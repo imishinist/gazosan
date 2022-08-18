@@ -6,12 +6,20 @@
 
 namespace gazosan {
 
+cv::Rect ImageSegment::rect_from(const cv::Point &upper_left) const {
+    return cv::Rect(upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height));
+}
+
 void load_image(Context &ctx) {
     if (!ctx.arg.new_file.empty()) {
         ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
+        ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
+        cv::cvtColor(ctx.new_color_mat, ctx.new_gray_mat, cv::COLOR_BGR2GRAY);
     }
     if (!ctx.arg.old_file.empty()) {
         ctx.old_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.old_file));
+        ctx.old_color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+        cv::cvtColor(ctx.old_color_mat, ctx.old_gray_mat, cv::COLOR_BGR2GRAY);
     }
 }
 
@@ -36,15 +44,176 @@ check_histogram_differential(Context &ctx) {
         return output;
     };
 
-    cv::Mat color_old_mat = decode_from_mapped_file(*ctx.old_file);
-    cv::Mat color_new_mat = decode_from_mapped_file(*ctx.new_file);
-    if (color_old_mat.empty() || color_new_mat.empty()) {
+    if (ctx.old_color_mat.empty() || ctx.new_color_mat.empty()) {
         return "failed to decode image file";
     }
 
-    cv::Mat hist_old_mat = preprocess_image(color_old_mat);
-    cv::Mat hist_new_mat = preprocess_image(color_new_mat);
+    cv::Mat hist_old_mat = preprocess_image(ctx.old_color_mat);
+    cv::Mat hist_new_mat = preprocess_image(ctx.new_color_mat);
     return cv::compareHist(hist_old_mat, hist_new_mat, 1) - 0.00001 <= 1e-13;
 }
+
+std::vector<cv::Rect> split_segments(const MappedFile<Context>& mapped_file, i32 threshold) {
+    // binarization
+    cv::Mat bin_mat;
+    cv::Mat gray_mat = decode_from_mapped_file(mapped_file, cv::IMREAD_GRAYSCALE);
+    cv::threshold(gray_mat, bin_mat, threshold, 255, cv::THRESH_BINARY);
+
+    // morphology
+    cv::Mat grd_mat;
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3,3));
+    cv::morphologyEx(bin_mat, grd_mat, cv::MORPH_GRADIENT, kernel, cv::Point(-1,-1), 7);
+
+    // list of contour
+    // [[[x1, y1],[x2, y2], ...]]
+    // 00100
+    // 01100
+    // 01001
+    // [ [[2, 0], [1, 1], [2, 1], [1, 2]],
+    //   [[4, 2]]]
+    std::vector<std::vector<cv::Point>> contours;
+
+    // cv::Vec4i => [next, previous, first_child, parent]
+    // PETR_CCOMP example:
+    // [0:[ 1 -1 -1 -1]
+    //  1:[ 3 0 2 -1]
+    //  2:[-1 -1 -1 1]
+    //  3:[ 4 1 -1 -1]
+    //  4:[-1 3 -1 -1]]
+    // "-": next, "=": child
+    // 0 ---> 1 ---> 3 ---> 4
+    //        + ===> 2
+    std::vector<cv::Vec4i> hierarchy;
+    grd_mat.convertTo(grd_mat, CV_32SC1, 1.0);
+    cv::findContours(grd_mat, contours, hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
+    if (contours.empty()) {
+        return {};
+    }
+
+    int labels = 0;
+    cv::Mat markers = cv::Mat::zeros(grd_mat.rows, grd_mat.cols, CV_32SC1);
+    for (int idx = 0; idx >= 0; idx = hierarchy[idx][0]) {
+        // hierarchy index correspond with contours
+        cv::drawContours(markers, contours, idx, cv::Scalar::all(++labels), -1, cv::LINE_8, hierarchy, INT_MAX);
+    }
+    markers = markers + 1;
+    // "watershed" regard 0 as unknown, so set un-labeled area to 1
+    cv::Mat color_mat = decode_from_mapped_file(mapped_file, cv::IMREAD_COLOR);
+    cv::watershed(color_mat, markers);
+
+    // overwrite markers
+    auto bfs = [&](int sx, int sy, auto&& bfs) -> std::optional<cv::Rect> {
+        cv::Point minP(sx, sy), maxP(sx, sy);
+
+        std::queue<std::pair<int, int>> Q;
+        Q.push(std::make_pair(sx, sy));
+        while (!Q.empty()) {
+            auto [x, y] = Q.front(); Q.pop();
+
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx, ny = y + dy;
+
+                    // skip myself
+                    if (dx == 0 && dy == 0) continue;
+                    // boundary check
+                    if (nx < 0 || nx >= markers.cols) continue;
+                    if (ny < 0 || ny >= markers.rows) continue;
+
+                    int label = markers.at<int>(ny, nx);
+                    // border: -1, background: 1, already processed: 0
+                    if (label <= 1) continue;
+                    // mark processed
+                    markers.at<int>(ny, nx) = 0;
+
+                    minP.x = std::min(minP.x, nx);
+                    minP.y = std::min(minP.y, ny);
+                    maxP.x = std::max(maxP.x, nx);
+                    maxP.y = std::max(maxP.y, ny);
+
+                    Q.push(std::make_pair(nx, ny));
+                }
+            }
+        }
+        if ((minP.x == sx && minP.y == sy) && (maxP.x == sx && maxP.y == sy)) {
+            return std::nullopt;
+        }
+        return cv::Rect(minP, maxP);
+    };
+
+    // grouping pixels and calculate group rectangle
+    std::vector<cv::Rect> segments;
+    for (int y = 0; y < markers.rows; y++) {
+        for (int x = 0; x < markers.cols; x++) {
+            int label = markers.at<int>(y, x);
+            if (label <= 1) continue;
+
+            if (auto rect = bfs(x, y, bfs))
+                segments.push_back(*rect);
+        }
+    }
+
+    return segments;
+}
+
+void detect_segments(Context &ctx) {
+    auto compute_descriptor = [&ctx](const cv::Mat& img) -> std::optional<cv::Mat> {
+        if (img.empty()) return std::nullopt;
+
+        std::vector<cv::KeyPoint> keypoint;
+        cv::Mat descriptor;
+        ctx.algorithm->detect(img, keypoint);
+        if (keypoint.empty()) return std::nullopt;
+
+        ctx.algorithm->compute(img, keypoint, descriptor);
+        descriptor.convertTo(descriptor, CV_32F);
+        return descriptor;
+    };
+
+    auto do_detect = [&](const MappedFile<Context>& file, std::vector<ImageSegment>& result) {
+        cv::Mat mat = decode_from_mapped_file(file, cv::IMREAD_GRAYSCALE);
+        for (int i = 0; auto segment : split_segments(file, ctx.arg.bin_threshold)) {
+            i++;
+            if (auto desc = compute_descriptor(mat(segment)))
+                result.emplace_back(segment, *desc);
+        }
+    };
+
+    do_detect(*ctx.old_file, ctx.old_segments);
+    do_detect(*ctx.new_file, ctx.new_segments);
+}
+
+void save_segments(Context &ctx) {
+    auto do_save = [&](const std::string& prefix, const cv::Mat &base_mat, const std::vector<ImageSegment> &segments) {
+        for (int i = 0; const auto &image_segment: segments) {
+            i++;
+
+            auto file_name = ctx.arg.output_name + "/" + prefix + "/" + std::to_string(i) + ".png";
+            cv::imwrite(file_name, base_mat(image_segment.area));
+        }
+    };
+
+    do_save("old", ctx.old_color_mat, ctx.old_segments);
+    do_save("new", ctx.new_color_mat, ctx.new_segments);
+}
+
+
+bool descriptor_match(const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
+    auto matcher = cv::DescriptorMatcher::create("FlannBased");
+
+    std::vector<cv::DMatch> matched, match12, match21;
+    matcher->match(descriptor1, descriptor2, match12);
+    matcher->match(descriptor2, descriptor1, match21);
+
+    for (auto forward : match12) {
+        cv::DMatch backward = match21[forward.trainIdx];
+        if (backward.trainIdx == forward.queryIdx)
+            matched.push_back(forward);
+    }
+
+    std::sort(matched.begin(), matched.end());
+    return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
+}
+
 
 } // namespace gazosan
