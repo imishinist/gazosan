@@ -279,7 +279,7 @@ void create_diff_image(Context& ctx) {
     });
 
     Timer t2(ctx, "write");
-    cv::imwrite("/tmp/foo.png", result);
+    cv::imwrite(ctx.arg.output_name + "_diff.png", result);
 }
 
 
