@@ -1,30 +1,24 @@
 # gazosan
 
-Gazo-san was rewritten in modern c++ (?) while making it faster. (This is my first time to write proper code in c++, so it may not be modern.
+[Gazo-san](https://github.com/lifull-dev/Gazo-san) was rewritten in modern c++ (?) while making it faster. (This is my first time to write proper code in c++, so it may not be modern.
 This is my first time to write proper code in c++, so it may not be modern.
 
 It is at least 5 times faster as far as I can tell at hand.
 
-Gazo-san
+Gazo-san(old)
 ```bash
-~/w/r/g/l/gazo-san $ time ./bin/gazosan tests/images/test_image_new.png tests/images/test_image_old.png
-Start detection
-Process time : 125836 - 125839
-
-________________________________________________________
-Executed in    3.21 secs    fish           external
-   usr time    3.37 secs    0.08 millis    3.37 secs
-   sys time    0.28 secs    1.36 millis    0.28 secs
+~/w/r/g/l/gazo-san $ hyperfine --warmup 3 './bin/gazosan tests/images/test_image_new.png tests/images/test_image_old.png'
+Benchmark 1: ./bin/gazosan tests/images/test_image_new.png tests/images/test_image_old.png
+  Time (mean ± σ):      3.220 s ±  0.018 s    [User: 3.401 s, System: 0.263 s]
+  Range (min … max):    3.187 s …  3.246 s    10 runs
 ```
 
-gazosan
+gazosan(new)
 ```bash
-~/w/gazo-san $ time ./build/gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png -threshold 200
-
-________________________________________________________
-Executed in  451.30 millis    fish           external
-   usr time    1.26 secs      0.05 millis    1.26 secs
-   sys time    0.16 secs      1.43 millis    0.16 secs
+~/w/gazo-san $ hyperfine --warmup 3 './build/gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png'
+Benchmark 1: ./build/gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png
+  Time (mean ± σ):     422.4 ms ±   4.1 ms    [User: 1262.8 ms, System: 157.6 ms]
+  Range (min … max):   413.4 ms … 428.9 ms    10 runs
 ```
 
 # Build
