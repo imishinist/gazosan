@@ -4,15 +4,27 @@
 
 #include "gazo-san.h"
 
+#include <tbb/global_control.h>
+
 using namespace gazosan;
+
+namespace gazosan {
+
+i64 get_default_thread_count() {
+    int n = tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
+    return std::min(n, 16);
+}
+
+} // namespace gazosan
 
 int main(int argc, char **argv) {
     Context ctx;
     Timer t_all(ctx, "all");
-
     for (int i = 0; i < argc; i++)
         ctx.cmdline_args.emplace_back(argv[i]);
     parse_args(ctx);
+
+    tbb::global_control tbb_cont(tbb::global_control::max_allowed_parallelism,ctx.arg.thread_count);
 
     load_image(ctx);
 

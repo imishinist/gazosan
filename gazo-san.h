@@ -26,6 +26,9 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/features2d.hpp>
 
+#include <tbb/concurrent_vector.h>
+#include <tbb/parallel_for_each.h>
+
 namespace gazosan {
 
 typedef uint8_t u8;
@@ -212,6 +215,7 @@ typedef struct Context {
 
         i32 bin_threshold = 200;
 
+        i64 thread_count = 0;
         bool perf = false;
     } arg;
     std::vector<std::string_view> cmdline_args;
@@ -232,6 +236,7 @@ typedef struct Context {
     std::vector<ImageSegment> old_segments;
 } Context;
 
+i64 get_default_thread_count();
 
 void parse_args(Context &ctx);
 void load_image(Context &ctx);

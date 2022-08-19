@@ -12,7 +12,8 @@ Options:
   -old <FILE>                 old image file path
   -o, --output <NAME>         output prefix name (default: diff)
   -threshold <NUMBER>         binary threshold
-  --perf                      Print performance statistics
+  -thread_count <NUMBER>      Use given number of threads
+  -perf                       Print performance statistics
 
 
   -h, --help                  report usage information
@@ -60,6 +61,8 @@ void parse_args(Context &ctx) {
             ctx.arg.bin_threshold = std::stoi(std::string(arg));
         } else if (read_arg("-o") || read_arg("--output")) {
             ctx.arg.output_name = arg;
+        } else if (read_arg("-thread_count")) {
+            ctx.arg.thread_count = std::stoi(std::string(arg));
         } else if (read_flag("-perf")) {
             ctx.arg.perf = true;
         } else {
@@ -72,6 +75,8 @@ void parse_args(Context &ctx) {
         Fatal(ctx) << "\"-new\" option is required";
     if (ctx.arg.old_file.empty())
         Fatal(ctx) << "\"-old\" option is required";
+    if (ctx.arg.thread_count == 0)
+        ctx.arg.thread_count = get_default_thread_count();
     if (ctx.arg.bin_threshold == 0)
         ctx.arg.bin_threshold = 200;
     if (ctx.arg.output_name.empty()) {

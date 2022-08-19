@@ -241,12 +241,13 @@ void create_diff_image(Context& ctx) {
             cv::minMaxLoc(ret, nullptr, nullptr, &min_point, nullptr);
             // Note: パーツのマッチングから対応する位置関係を取得できないか？
 
+            auto area = image_segment2.area;
             auto rect = image_segment2.rect_from(min_point);
             cv::rectangle(result, rect, CV_RGB(255, 0, 0), 1);
             for (int i = 0; i < rect.height; i++) {
                 for (int j = 0; j < rect.width; j++) {
                     auto old_cropped = ctx.old_color_mat.at<cv::Vec3b>(i + rect.y, j + rect.x);
-                    auto new_cropped = ctx.new_color_mat.at<cv::Vec3b>(i + image_segment2.area.y, j + image_segment2.area.x);
+                    auto new_cropped = ctx.new_color_mat.at<cv::Vec3b>(i + area.y, j + area.x);
 
                     if (old_cropped != new_cropped) {
                         result.at<cv::Vec3b>(i + rect.y, j + rect.x) = cv::Vec3b(0, 0, 255);
