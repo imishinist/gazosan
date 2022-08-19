@@ -23,6 +23,11 @@ Benchmark 1: ./build/gazosan -new tests/images/test_image_new.png -old tests/ima
 
 # Build
 
+## requirements
+
+- OpenCV 4
+- TBB
+
 ```bash
 $ mkdir build; cd build
 $ cmake -DCMAKE_BUILD_TYPE=Release ..
