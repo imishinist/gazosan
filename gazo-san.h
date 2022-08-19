@@ -195,8 +195,10 @@ class ImageSegment {
 public:
     cv::Rect area;
     cv::Mat descriptor;
+    cv::Mat roi; // gray
 
-    ImageSegment(cv::Rect area, cv::Mat descriptor): area(area), descriptor(std::move(descriptor)) {};
+    ImageSegment(cv::Rect area, cv::Mat roi): area(area), roi(roi) {};
+    ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi): area(area), descriptor(std::move(descriptor)), roi(roi) {};
 
     cv::Rect rect_from(const cv::Point& upper_left) const;
 };

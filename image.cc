@@ -179,14 +179,24 @@ void detect_segments(Context &ctx) {
 
     auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, std::vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect");
-        auto segments = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
+        auto segment_tmp = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
 
-        Timer t3(ctx, "compute descriptor each segments");
-        for (auto segment : segments) {
-            if (auto desc = compute_descriptor(gray_mat(segment)))
-                result.emplace_back(segment, *desc);
+        Timer t3(ctx, "create segments");
+        for (auto segment : segment_tmp) {
+            auto roi = gray_mat(segment);
+            result.emplace_back(segment, roi);
         }
         t3.stop();
+
+        Timer t4(ctx, "compute descriptors");
+        tbb::parallel_for_each(result, [&](ImageSegment& segment) {
+            if (auto desc = compute_descriptor(segment.roi))
+                segment.descriptor = *desc;
+        });
+        std::erase_if(result, [](const ImageSegment& seg){
+            return seg.descriptor.empty();
+        });
+        t4.stop();
     };
 
     do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
@@ -230,14 +240,14 @@ void create_diff_image(Context& ctx) {
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
     for (const auto& image_segment1 : ctx.old_segments) {
-        for (const auto& image_segment2 : ctx.new_segments) {
+        tbb::parallel_for_each(ctx.new_segments, [&](const ImageSegment& image_segment2) {
             if (!descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
-                continue;
+                return;
 
             // find `new` parts from `old` image
             cv::Mat ret;
             cv::Point min_point;
-            cv::matchTemplate(ctx.old_gray_mat, ctx.new_gray_mat(image_segment2.area), ret, cv::TM_SQDIFF);
+            cv::matchTemplate(ctx.old_gray_mat, image_segment2.roi, ret, cv::TM_SQDIFF);
             cv::minMaxLoc(ret, nullptr, nullptr, &min_point, nullptr);
             // Note: パーツのマッチングから対応する位置関係を取得できないか？
 
@@ -255,9 +265,10 @@ void create_diff_image(Context& ctx) {
                 }
             }
 
-            break;
-        }
+        });
     }
+
+    Timer t2(ctx, "write");
     cv::imwrite("/tmp/foo.png", result);
 }
 
