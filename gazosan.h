@@ -26,6 +26,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/features2d.hpp>
 
+#include <tbb/tbb.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_for_each.h>
 
@@ -98,7 +99,7 @@ struct TimerRecord {
 
     std::string name;
     TimerRecord *parent;
-    std::vector<TimerRecord *> children;
+    tbb::concurrent_vector<TimerRecord *> children;
     i64 start;
     i64 end;
     i64 user;
@@ -106,7 +107,7 @@ struct TimerRecord {
     bool stopped = false;
 };
 
-void print_timer_records(std::vector<std::unique_ptr<TimerRecord>> &);
+void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>> &);
 
 template <typename C>
 class Timer {
@@ -221,7 +222,7 @@ typedef struct Context {
         bool perf = false;
     } arg;
     std::vector<std::string_view> cmdline_args;
-    std::vector<std::unique_ptr<TimerRecord>> timer_records;
+    tbb::concurrent_vector<std::unique_ptr<TimerRecord>> timer_records;
 
     cv::Ptr<cv::AKAZE> algorithm = cv::AKAZE::create();
 

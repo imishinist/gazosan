@@ -63,7 +63,7 @@ static void print_rec(TimerRecord &rec, i64 indent) {
         print_rec(*child, indent + 1);
 }
 
-void print_timer_records(std::vector<std::unique_ptr<TimerRecord>> &records) {
+void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>> &records) {
     for (i64 i = records.size() - 1; i >= 0; i--)
         records[i]->stop();
 

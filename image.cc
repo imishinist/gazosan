@@ -13,16 +13,23 @@ cv::Rect ImageSegment::rect_from(const cv::Point &upper_left) const {
 void load_image(Context &ctx) {
     Timer t(ctx, "load image");
 
-    if (!ctx.arg.new_file.empty()) {
-        ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
-        ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
-        cv::cvtColor(ctx.new_color_mat, ctx.new_gray_mat, cv::COLOR_BGR2GRAY);
-    }
-    if (!ctx.arg.old_file.empty()) {
-        ctx.old_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.old_file));
-        ctx.old_color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
-        cv::cvtColor(ctx.old_color_mat, ctx.old_gray_mat, cv::COLOR_BGR2GRAY);
-    }
+    tbb::task_group tg;
+    tg.run([&]() {
+        if (!ctx.arg.new_file.empty()) {
+            ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
+            ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
+            cv::cvtColor(ctx.new_color_mat, ctx.new_gray_mat, cv::COLOR_BGR2GRAY);
+        }
+    });
+
+    tg.run([&]() {
+        if (!ctx.arg.old_file.empty()) {
+            ctx.old_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.old_file));
+            ctx.old_color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+            cv::cvtColor(ctx.old_color_mat, ctx.old_gray_mat, cv::COLOR_BGR2GRAY);
+        }
+    });
+    tg.wait();
 }
 
 cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags = cv::IMREAD_UNCHANGED) {
@@ -178,17 +185,15 @@ void detect_segments(Context &ctx) {
     };
 
     auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, std::vector<ImageSegment>& result) {
-        Timer t2(ctx, "do detect");
+        Timer t2(ctx, "do detect", &t);
         auto segment_tmp = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
 
-        Timer t3(ctx, "create segments");
         for (auto segment : segment_tmp) {
             auto roi = gray_mat(segment);
             result.emplace_back(segment, roi);
         }
-        t3.stop();
 
-        Timer t4(ctx, "compute descriptors");
+        Timer t4(ctx, "compute descriptors", &t2);
         tbb::parallel_for_each(result, [&](ImageSegment& segment) {
             if (auto desc = compute_descriptor(segment.roi))
                 segment.descriptor = *desc;
@@ -199,8 +204,14 @@ void detect_segments(Context &ctx) {
         t4.stop();
     };
 
-    do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
-    do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments);
+    tbb::task_group tg;
+    tg.run([&]() {
+        do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
+    });
+    tg.run([&]() {
+        do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments);
+    });
+    tg.wait();
 }
 
 void save_segments(Context &ctx) {
@@ -239,7 +250,7 @@ void create_diff_image(Context& ctx) {
     Timer t(ctx, "create diff image");
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
-    for (const auto& image_segment1 : ctx.old_segments) {
+    tbb::parallel_for_each(ctx.old_segments, [&](const ImageSegment& image_segment1) {
         tbb::parallel_for_each(ctx.new_segments, [&](const ImageSegment& image_segment2) {
             if (!descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
@@ -264,9 +275,8 @@ void create_diff_image(Context& ctx) {
                     }
                 }
             }
-
         });
-    }
+    });
 
     Timer t2(ctx, "write");
     cv::imwrite("/tmp/foo.png", result);
