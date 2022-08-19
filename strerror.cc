@@ -2,7 +2,7 @@
 // Created by Taisuke Miyazaki on 2022/08/16.
 //
 
-#include "gazo-san.h"
+#include "gazosan.h"
 
 namespace gazosan {
 
