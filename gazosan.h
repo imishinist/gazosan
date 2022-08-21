@@ -198,6 +198,8 @@ public:
     cv::Mat descriptor;
     cv::Mat roi; // gray
 
+    bool matched;
+
     ImageSegment(cv::Rect area, cv::Mat roi): area(area), roi(roi) {};
     ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi): area(area), descriptor(std::move(descriptor)), roi(roi) {};
 

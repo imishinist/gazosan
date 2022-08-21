@@ -68,6 +68,7 @@ check_histogram_differential(Context &ctx) {
 std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, const cv::Mat& color_mat, i32 threshold) {
     Timer t(ctx, "split segments");
 
+    Timer t_image(ctx, "image processing", &t);
     // binarization
     cv::Mat bin_mat;
     cv::threshold(gray_mat, bin_mat, threshold, 255, cv::THRESH_BINARY);
@@ -113,6 +114,8 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
     // "watershed" regard 0 as unknown, so set un-labeled area to 1
     cv::watershed(color_mat, markers);
 
+    t_image.stop();
+
     // overwrite markers
     auto bfs = [&](int sx, int sy, auto&& bfs) -> std::optional<cv::Rect> {
         cv::Point minP(sx, sy), maxP(sx, sy);
@@ -153,8 +156,10 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
         return cv::Rect(minP, maxP);
     };
 
+    Timer t_grouping(ctx, "grouping", &t);
     // grouping pixels and calculate group rectangle
     std::vector<cv::Rect> segments;
+
     for (int y = 0; y < markers.rows; y++) {
         for (int x = 0; x < markers.cols; x++) {
             int label = markers.at<int>(y, x);
@@ -250,10 +255,12 @@ void create_diff_image(Context& ctx) {
     Timer t(ctx, "create diff image");
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
-    tbb::parallel_for_each(ctx.old_segments, [&](const ImageSegment& image_segment1) {
-        tbb::parallel_for_each(ctx.new_segments, [&](const ImageSegment& image_segment2) {
-            if (!descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
+    tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
+        tbb::parallel_for_each(ctx.new_segments, [&](ImageSegment& image_segment2) {
+            if (image_segment2.matched || !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
+            image_segment1.matched = true;
+            image_segment2.matched = true;
 
             // find `new` parts from `old` image
             cv::Mat ret;
