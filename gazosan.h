@@ -198,7 +198,7 @@ public:
     cv::Mat descriptor;
     cv::Mat roi; // gray
 
-    bool matched;
+    bool matched = false;
 
     ImageSegment(cv::Rect area, cv::Mat roi): area(area), roi(roi) {};
     ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi): area(area), descriptor(std::move(descriptor)), roi(roi) {};
@@ -217,6 +217,7 @@ typedef struct Context {
         std::string new_file;
         std::string old_file;
         std::string output_name;
+        bool create_change_image = false;
 
         i32 bin_threshold = 200;
 

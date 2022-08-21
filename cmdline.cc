@@ -11,6 +11,7 @@ Options:
   -new <FILE>                 new image file path
   -old <FILE>                 old image file path
   -o, --output <NAME>         output prefix name (default: diff)
+  -create_change_image        create changed image
   -threshold <NUMBER>         binary threshold
   -thread_count <NUMBER>      Use given number of threads
   -perf                       Print performance statistics
@@ -61,6 +62,8 @@ void parse_args(Context &ctx) {
             ctx.arg.bin_threshold = std::stoi(std::string(arg));
         } else if (read_arg("-o") || read_arg("--output")) {
             ctx.arg.output_name = arg;
+        } else if (read_flag("-create_change_image")) {
+            ctx.arg.create_change_image = true;
         } else if (read_arg("-thread_count")) {
             ctx.arg.thread_count = std::stoi(std::string(arg));
         } else if (read_flag("-perf")) {

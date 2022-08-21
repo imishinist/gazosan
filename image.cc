@@ -75,6 +75,7 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
 
     // morphology
     cv::Mat grd_mat;
+    // If the Size is too small, each part will be too detailed, so we use 3x3.
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3,3));
     cv::morphologyEx(bin_mat, grd_mat, cv::MORPH_GRADIENT, kernel, cv::Point(-1,-1), 7);
 
@@ -203,9 +204,6 @@ void detect_segments(Context &ctx) {
             if (auto desc = compute_descriptor(segment.roi))
                 segment.descriptor = *desc;
         });
-        std::erase_if(result, [](const ImageSegment& seg){
-            return seg.descriptor.empty();
-        });
         t4.stop();
     };
 
@@ -255,10 +253,16 @@ void create_diff_image(Context& ctx) {
     Timer t(ctx, "create diff image");
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
-    tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
+
+    // this is not parallel for atomicity.
+    for (auto& image_segment1 : ctx.old_segments) {
         tbb::parallel_for_each(ctx.new_segments, [&](ImageSegment& image_segment2) {
-            if (image_segment2.matched || !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
+            if (image_segment1.descriptor.empty() ||
+                image_segment2.descriptor.empty() ||
+                image_segment2.matched ||
+                !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
+
             image_segment1.matched = true;
             image_segment2.matched = true;
 
@@ -283,10 +287,34 @@ void create_diff_image(Context& ctx) {
                 }
             }
         });
-    });
-
+    }
     Timer t2(ctx, "write");
     cv::imwrite(ctx.arg.output_name + "_diff.png", result);
+
+    auto draw_not_matched = [&](cv::Mat result, const std::vector<ImageSegment>& segments) {
+        tbb::parallel_for_each(segments, [&](const ImageSegment& image_segment) {
+            if (image_segment.matched)
+                return;
+
+            cv::rectangle(result, image_segment.area, CV_RGB(0, 255, 0), 2);
+        });
+    };
+
+    if (ctx.arg.create_change_image) {
+        Timer t3(ctx, "create added and deleted image");
+        tbb::task_group tg;
+        tg.run([&]() {
+            cv::Mat deleted = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+            draw_not_matched(deleted, ctx.old_segments);
+            cv::imwrite(ctx.arg.output_name + "_deleted.png", deleted);
+        });
+        tg.run([&]() {
+            cv::Mat added = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
+            draw_not_matched(added, ctx.new_segments);
+            cv::imwrite(ctx.arg.output_name + "_added.png", added);
+        });
+        tg.wait();
+    }
 }
 
 
