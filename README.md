@@ -1,9 +1,8 @@
 # gazosan
 
-[Gazo-san](https://github.com/lifull-dev/Gazo-san) was rewritten in modern c++ (?) while making it faster. (This is my first time to write proper code in c++, so it may not be modern.
-This is my first time to write proper code in c++, so it may not be modern.
+[Gazo-san](https://github.com/lifull-dev/Gazo-san) was rewritten in modern c++ (?) while making it faster. (This is my first time to write proper code in c++, so it may not be modern.)
 
-It is at least 5 times faster as far as I can tell at hand.
+It is at least 8 times faster as far as I can tell at hand.
 
 Gazo-san(old)
 ```bash
