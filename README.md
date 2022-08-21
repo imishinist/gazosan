@@ -17,8 +17,8 @@ gazosan(new)
 ```bash
 ~/w/gazo-san $ hyperfine --warmup 3 './build/gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png'
 Benchmark 1: ./build/gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png
-  Time (mean ± σ):     422.4 ms ±   4.1 ms    [User: 1262.8 ms, System: 157.6 ms]
-  Range (min … max):   413.4 ms … 428.9 ms    10 runs
+  Time (mean ± σ):     350.4 ms ±   9.9 ms    [User: 744.8 ms, System: 135.3 ms]
+  Range (min … max):   341.4 ms … 372.0 ms    10 runs
 ```
 
 # Build
