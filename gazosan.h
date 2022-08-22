@@ -9,11 +9,12 @@
 #include <numeric>
 #include <optional>
 #include <queue>
+#include <sstream>
 #include <stack>
 #include <string>
 #include <string_view>
-#include <sstream>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <cstdlib>
@@ -166,7 +167,13 @@ MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
     auto *mf = new MappedFile;
     mf->name = path;
     mf->size = st.st_size;
+#ifdef _WIN32
+    // not supported
+#elif defined(__APPLE__)
     mf->mtime = (u64)st.st_mtimespec.tv_sec * 1000000000 + st.st_mtimespec.tv_nsec;
+#else
+    mf->mtime = (u64)st.st_mtim.tv_sec * 1000000000 + st.st_mtim.tv_nsec;
+#endif
     if (st.st_size > 0) {
         mf->data = (u8 *)mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
         if (mf->data == MAP_FAILED)
