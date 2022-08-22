@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: install-build-deps
-      run: sudo apt-get update && sudo apt-get install -y cmake
+      run: sudo apt-get update && sudo apt-get install -y cmake libopencv-dev
     - name: cmake build
       run: |
         mkdir build
