@@ -17,16 +17,7 @@ jobs:
     - name: install-build-deps
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-		    cmake \
-			libopencv-dev \
-            libopencv-dev \
-            libjpeg-dev \
-            libpng-dev \
-            libtiff-dev \
-            libtbb-dev \
-            libwebp-dev \
-            libjbig-dev
+        sudo apt-get install -y --no-install-recommends cmake libopencv-dev libjpeg-dev libpng-dev libtiff-dev libtbb-dev libwebp-dev libjbig-dev
 
     - name: cmake build
       run: |
