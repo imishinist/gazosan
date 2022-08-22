@@ -1,0 +1,9 @@
+# Git
+.gitignore
+
+# Test
+tests
+
+# Build
+build
+cmake-build-debug
