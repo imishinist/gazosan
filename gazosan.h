@@ -220,6 +220,7 @@ typedef struct Context {
         bool create_change_image = false;
 
         i32 bin_threshold = 200;
+        bool cross_check = false;
 
         i64 thread_count = 0;
         bool perf = false;

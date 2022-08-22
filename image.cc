@@ -233,20 +233,30 @@ void save_segments(Context &ctx) {
 
 
 bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
-    auto matcher = cv::DescriptorMatcher::create("FlannBased");
+    auto matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
 
     std::vector<cv::DMatch> matched, match12, match21;
     matcher->match(descriptor1, descriptor2, match12);
     matcher->match(descriptor2, descriptor1, match21);
 
-    for (auto forward : match12) {
-        cv::DMatch backward = match21[forward.trainIdx];
-        if (backward.trainIdx == forward.queryIdx)
-            matched.push_back(forward);
+    if (ctx.arg.cross_check) {
+        for (auto forward : match12) {
+            cv::DMatch backward = match21[forward.trainIdx];
+            if (backward.trainIdx == forward.queryIdx)
+                matched.push_back(forward);
+        }
+
+        std::sort(matched.begin(), matched.end());
+        return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
     }
 
-    std::sort(matched.begin(), matched.end());
-    return !matched.empty() && matched[matched.size() / 2].distance <= 1.0f;
+    std::sort(match12.begin(), match12.end());
+    std::sort(match21.begin(), match21.end());
+
+    // descriptor1 -> descriptor2 match or descriptor2 -> descriptor1 match
+    float threshold = 1.0f;
+    return (!match12.empty() && match12[match12.size() / 2].distance <= threshold) ||
+           (!match21.empty() && match21[match21.size() / 2].distance <= threshold);
 }
 
 void create_diff_image(Context& ctx) {

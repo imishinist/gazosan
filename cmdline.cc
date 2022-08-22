@@ -13,6 +13,7 @@ Options:
   -o, --output <NAME>         output prefix name (default: diff)
   -create_change_image        create changed image
   -threshold <NUMBER>         binary threshold
+  -cross_check                cross check descriptor matching
   -thread_count <NUMBER>      Use given number of threads
   -perf                       Print performance statistics
 
@@ -64,6 +65,8 @@ void parse_args(Context &ctx) {
             ctx.arg.output_name = arg;
         } else if (read_flag("-create_change_image")) {
             ctx.arg.create_change_image = true;
+        } else if (read_flag("-cross_check")) {
+            ctx.arg.cross_check = true;
         } else if (read_arg("-thread_count")) {
             ctx.arg.thread_count = std::stoi(std::string(arg));
         } else if (read_flag("-perf")) {
