@@ -1,5 +1,7 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.0)
 project(gazosan)
+
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -36,3 +38,13 @@ endif()
 
 find_package(OpenCV REQUIRED)
 target_link_libraries(gazosan PRIVATE ${OpenCV_LIBS})
+
+if(NOT CMAKE_SKIP_INSTALL_RULES)
+  install(TARGETS gazosan)
+  install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+  install(CODE "
+    set(DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+    file(RELATIVE_PATH RELPATH
+       /${CMAKE_INSTALL_LIBEXECDIR}/gazosan /${CMAKE_INSTALL_BINDIR}/gazosan)")
+endif()
+
