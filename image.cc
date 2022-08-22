@@ -190,7 +190,7 @@ void detect_segments(Context &ctx) {
         return descriptor;
     };
 
-    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, std::vector<ImageSegment>& result) {
+    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, tbb::concurrent_vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect", &t);
         auto segment_tmp = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
 
@@ -218,7 +218,7 @@ void detect_segments(Context &ctx) {
 }
 
 void save_segments(Context &ctx) {
-    auto do_save = [&](const std::string& prefix, const cv::Mat &base_mat, const std::vector<ImageSegment> &segments) {
+    auto do_save = [&](const std::string& prefix, const cv::Mat &base_mat, const tbb::concurrent_vector<ImageSegment> &segments) {
         for (int i = 0; const auto &image_segment: segments) {
             i++;
 
@@ -264,12 +264,11 @@ void create_diff_image(Context& ctx) {
 
     cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
 
-    // this is not parallel for atomicity.
-    for (auto& image_segment1 : ctx.old_segments) {
+    tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
+        if (image_segment1.descriptor.empty() || image_segment1.matched)
+            return;
         tbb::parallel_for_each(ctx.new_segments, [&](ImageSegment& image_segment2) {
-            if (image_segment1.descriptor.empty() ||
-                image_segment2.descriptor.empty() ||
-                image_segment2.matched ||
+            if (image_segment2.descriptor.empty() || image_segment2.matched ||
                 !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
 
@@ -297,11 +296,11 @@ void create_diff_image(Context& ctx) {
                 }
             }
         });
-    }
+    });
     Timer t2(ctx, "write");
     cv::imwrite(ctx.arg.output_name + "_diff.png", result);
 
-    auto draw_not_matched = [&](cv::Mat result, const std::vector<ImageSegment>& segments) {
+    auto draw_not_matched = [&](cv::Mat result, const tbb::concurrent_vector<ImageSegment>& segments) {
         tbb::parallel_for_each(segments, [&](const ImageSegment& image_segment) {
             if (image_segment.matched)
                 return;

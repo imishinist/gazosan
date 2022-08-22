@@ -239,8 +239,8 @@ typedef struct Context {
     cv::Mat new_gray_mat;
     cv::Mat old_gray_mat;
 
-    std::vector<ImageSegment> new_segments;
-    std::vector<ImageSegment> old_segments;
+    tbb::concurrent_vector<ImageSegment> new_segments;
+    tbb::concurrent_vector<ImageSegment> old_segments;
 } Context;
 
 i64 get_default_thread_count();
