@@ -262,7 +262,9 @@ bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& d
 void create_diff_image(Context& ctx) {
     Timer t(ctx, "create diff image");
 
-    cv::Mat result = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+    cv::Mat result;
+    cv::Mat temp[] = {ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat};
+    cv::merge(temp, 3, result);
 
     tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
         if (image_segment1.descriptor.empty() || image_segment1.matched)
