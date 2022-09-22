@@ -1,5 +1,8 @@
 FROM rhikimochi/opencv-docker:v0.14 as builder
 
+LABEL org.opencontainers.image.source=https://github.com/imishinist/gazosan
+
+
 COPY . /app
 WORKDIR /app
 RUN mkdir build && \
