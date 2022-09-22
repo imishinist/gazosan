@@ -23,6 +23,14 @@ Benchmark 1: ./build/gazosan -new tests/images/test_image_new.png -old tests/ima
     Range (min … max):   393.3 ms … 419.6 ms    10 runs
 ```
 
+# Run
+
+Docker
+
+```
+docker run --rm -v $(pwd):/app ghcr.io/imishinist/gazosan gazosan -new tests/images/test_image_new.png -old tests/images/test_image_old.png -perf -create_change_image
+```
+
 # Build
 
 ## requirements
