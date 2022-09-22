@@ -40,7 +40,9 @@ find_package(OpenCV REQUIRED)
 target_link_libraries(gazosan PRIVATE ${OpenCV_LIBS})
 
 if(NOT CMAKE_SKIP_INSTALL_RULES)
-  install(TARGETS gazosan)
+  install(TARGETS gazosan
+          RUNTIME DESTINATION bin
+  )
   install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
   install(CODE "
     set(DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")

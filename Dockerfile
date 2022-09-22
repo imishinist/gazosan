@@ -5,7 +5,8 @@ WORKDIR /app
 RUN mkdir build && \
     cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . -j $(nproc)
+    cmake --build . -j $(nproc) && \
+    cp gazosan ..
 
 FROM ubuntu:rolling
 WORKDIR /app

@@ -10,7 +10,7 @@ static const char helpmsg[] = R"(
 Options:
   -new <FILE>                 new image file path
   -old <FILE>                 old image file path
-  -o, --output <NAME>         output prefix name (default: diff)
+  -o, --output <NAME>         output prefix name (default: image_difference)
   -create_change_image        create changed image
   -threshold <NUMBER>         binary threshold
   -cross_check                cross check descriptor matching
@@ -86,7 +86,7 @@ void parse_args(Context &ctx) {
     if (ctx.arg.bin_threshold == 0)
         ctx.arg.bin_threshold = 200;
     if (ctx.arg.output_name.empty()) {
-        ctx.arg.output_name = "image";
+        ctx.arg.output_name = "image_difference";
     }
 }
 

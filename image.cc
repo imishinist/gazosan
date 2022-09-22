@@ -317,12 +317,12 @@ void create_diff_image(Context& ctx) {
         tg.run([&]() {
             cv::Mat deleted = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
             draw_not_matched(deleted, ctx.old_segments);
-            cv::imwrite(ctx.arg.output_name + "_deleted.png", deleted);
+            cv::imwrite(ctx.arg.output_name + "_delete.png", deleted);
         });
         tg.run([&]() {
             cv::Mat added = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
             draw_not_matched(added, ctx.new_segments);
-            cv::imwrite(ctx.arg.output_name + "_added.png", added);
+            cv::imwrite(ctx.arg.output_name + "_add.png", added);
         });
         tg.wait();
     }
