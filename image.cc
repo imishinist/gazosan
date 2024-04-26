@@ -6,11 +6,13 @@
 
 namespace gazosan {
 
-cv::Rect ImageSegment::rect_from(const cv::Point &upper_left) const {
+cv::Rect ImageSegment::rect_from(const cv::Point& upper_left) const
+{
     return cv::Rect(upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height));
 }
 
-void load_image(Context &ctx) {
+void load_image(Context& ctx)
+{
     Timer t(ctx, "load image");
 
     tbb::task_group tg;
@@ -32,12 +34,13 @@ void load_image(Context &ctx) {
     tg.wait();
 }
 
-cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags = cv::IMREAD_UNCHANGED) {
+cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags = cv::IMREAD_UNCHANGED)
+{
     return cv::imdecode(cv::Mat(1, mapped_file.size, CV_8UC1, mapped_file.data), flags);
 }
 
-std::variant<bool, std::string>
-check_histogram_differential(Context &ctx) {
+std::variant<bool, std::string> check_histogram_differential(Context& ctx)
+{
     Timer t(ctx, "check histogram differential");
 
     auto preprocess_image = [&](const cv::Mat& color_mat) {
@@ -45,11 +48,11 @@ check_histogram_differential(Context &ctx) {
         cv::Mat hsv_mat, output;
         cv::cvtColor(color_mat, hsv_mat, cv::COLOR_BGR2HSV);
 
-        int channels[] = {0,1};
-        float h_ranges[] = {0, 180};;
-        float s_ranges[] = {0, 256};;
-        const int hist_size[] = {256, 256};
-        const float *ranges[] = {h_ranges, s_ranges};
+        int channels[] = { 0, 1 };
+        float h_ranges[] = { 0, 180 };
+        float s_ranges[] = { 0, 256 };
+        const int hist_size[] = { 256, 256 };
+        const float* ranges[] = { h_ranges, s_ranges };
 
         cv::calcHist(&hsv_mat, 1, channels, cv::Mat(), output, 2, hist_size, ranges, true, false);
         cv::normalize(output, output, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
@@ -65,7 +68,8 @@ check_histogram_differential(Context &ctx) {
     return cv::compareHist(hist_old_mat, hist_new_mat, 1) - 0.00001 <= 1e-13;
 }
 
-std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, const cv::Mat& color_mat, i32 threshold) {
+std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, const cv::Mat& color_mat, i32 threshold)
+{
     Timer t(ctx, "split segments");
 
     Timer t_image(ctx, "image processing", &t);
@@ -76,8 +80,8 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
     // morphology
     cv::Mat grd_mat;
     // If the Size is too small, each part will be too detailed, so we use 3x3.
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3,3));
-    cv::morphologyEx(bin_mat, grd_mat, cv::MORPH_GRADIENT, kernel, cv::Point(-1,-1), 7);
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    cv::morphologyEx(bin_mat, grd_mat, cv::MORPH_GRADIENT, kernel, cv::Point(-1, -1), 7);
 
     // list of contour
     // [[[x1, y1],[x2, y2], ...]]
@@ -124,21 +128,26 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
         std::queue<std::pair<int, int>> Q;
         Q.push(std::make_pair(sx, sy));
         while (!Q.empty()) {
-            auto [x, y] = Q.front(); Q.pop();
+            auto [x, y] = Q.front();
+            Q.pop();
 
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     int nx = x + dx, ny = y + dy;
 
                     // skip myself
-                    if (dx == 0 && dy == 0) continue;
+                    if (dx == 0 && dy == 0)
+                        continue;
                     // boundary check
-                    if (nx < 0 || nx >= markers.cols) continue;
-                    if (ny < 0 || ny >= markers.rows) continue;
+                    if (nx < 0 || nx >= markers.cols)
+                        continue;
+                    if (ny < 0 || ny >= markers.rows)
+                        continue;
 
                     int label = markers.at<int>(ny, nx);
                     // border: -1, background: 1, already processed: 0
-                    if (label <= 1) continue;
+                    if (label <= 1)
+                        continue;
                     // mark processed
                     markers.at<int>(ny, nx) = 0;
 
@@ -164,7 +173,8 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
     for (int y = 0; y < markers.rows; y++) {
         for (int x = 0; x < markers.cols; x++) {
             int label = markers.at<int>(y, x);
-            if (label <= 1) continue;
+            if (label <= 1)
+                continue;
 
             if (auto rect = bfs(x, y, bfs))
                 segments.push_back(*rect);
@@ -174,23 +184,27 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
     return segments;
 }
 
-void detect_segments(Context &ctx) {
+void detect_segments(Context& ctx)
+{
     Timer t(ctx, "detect segments");
 
     auto compute_descriptor = [&ctx](const cv::Mat& img) -> std::optional<cv::Mat> {
-        if (img.empty()) return std::nullopt;
+        if (img.empty())
+            return std::nullopt;
 
         std::vector<cv::KeyPoint> keypoint;
         cv::Mat descriptor;
         ctx.algorithm->detect(img, keypoint);
-        if (keypoint.empty()) return std::nullopt;
+        if (keypoint.empty())
+            return std::nullopt;
 
         ctx.algorithm->compute(img, keypoint, descriptor);
         descriptor.convertTo(descriptor, CV_32F);
         return descriptor;
     };
 
-    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, tbb::concurrent_vector<ImageSegment>& result) {
+    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat,
+                         tbb::concurrent_vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect", &t);
         auto segment_tmp = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
 
@@ -208,18 +222,16 @@ void detect_segments(Context &ctx) {
     };
 
     tbb::task_group tg;
-    tg.run([&]() {
-        do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
-    });
-    tg.run([&]() {
-        do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments);
-    });
+    tg.run([&]() { do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments); });
+    tg.run([&]() { do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments); });
     tg.wait();
 }
 
-void save_segments(Context &ctx) {
-    auto do_save = [&](const std::string& prefix, const cv::Mat &base_mat, const tbb::concurrent_vector<ImageSegment> &segments) {
-        for (int i = 0; const auto &image_segment: segments) {
+void save_segments(Context& ctx)
+{
+    auto do_save = [&](const std::string& prefix, const cv::Mat& base_mat,
+                       const tbb::concurrent_vector<ImageSegment>& segments) {
+        for (int i = 0; const auto& image_segment : segments) {
             i++;
 
             auto file_name = ctx.arg.output_name + "/" + prefix + "/" + std::to_string(i) + ".png";
@@ -231,8 +243,8 @@ void save_segments(Context &ctx) {
     do_save("new", ctx.new_color_mat, ctx.new_segments);
 }
 
-
-bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2) {
+bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2)
+{
     auto matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
 
     std::vector<cv::DMatch> matched, match12, match21;
@@ -255,23 +267,22 @@ bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& d
 
     // descriptor1 -> descriptor2 match or descriptor2 -> descriptor1 match
     float threshold = 1.0f;
-    return (!match12.empty() && match12[match12.size() / 2].distance <= threshold) ||
-           (!match21.empty() && match21[match21.size() / 2].distance <= threshold);
+    return (!match12.empty() && match12[match12.size() / 2].distance <= threshold) || (!match21.empty() && match21[match21.size() / 2].distance <= threshold);
 }
 
-void create_diff_image(Context& ctx) {
+void create_diff_image(Context& ctx)
+{
     Timer t(ctx, "create diff image");
 
     cv::Mat result;
-    cv::Mat temp[] = {ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat};
+    cv::Mat temp[] = { ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat };
     cv::merge(temp, 3, result);
 
     tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
         if (image_segment1.descriptor.empty() || image_segment1.matched)
             return;
         tbb::parallel_for_each(ctx.new_segments, [&](ImageSegment& image_segment2) {
-            if (image_segment2.descriptor.empty() || image_segment2.matched ||
-                !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
+            if (image_segment2.descriptor.empty() || image_segment2.matched || !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
 
             image_segment1.matched = true;
@@ -327,6 +338,5 @@ void create_diff_image(Context& ctx) {
         tg.wait();
     }
 }
-
 
 } // namespace gazosan

@@ -18,18 +18,18 @@
 #include <vector>
 
 #include <cstdlib>
-#include <unistd.h>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
+#include <opencv2/features2d.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/features2d.hpp>
 
-#include <tbb/tbb.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_for_each.h>
+#include <tbb/tbb.h>
 
 namespace gazosan {
 
@@ -48,14 +48,20 @@ std::string_view errno_string();
 template <typename C>
 class SyncOut {
 public:
-    explicit SyncOut(C &ctx, std::ostream &out = std::cout) : out(out) {}
+    explicit SyncOut(C& ctx, std::ostream& out = std::cout)
+        : out(out)
+    {
+    }
 
-    ~SyncOut() {
+    ~SyncOut()
+    {
         std::scoped_lock lock(mu);
         out << ss.str() << "\n";
     }
 
-    template <class T> SyncOut &operator<<(T &&val) {
+    template <class T>
+    SyncOut& operator<<(T&& val)
+    {
         ss << std::forward<T>(val);
         return *this;
     }
@@ -63,12 +69,13 @@ public:
     static inline std::mutex mu;
 
 private:
-    std::ostream &out;
+    std::ostream& out;
     std::stringstream ss;
 };
 
 template <typename C>
-static std::string add_color(C &ctx, std::string msg) {
+static std::string add_color(C& ctx, std::string msg)
+{
     if (ctx.arg.color_diagnostics)
         return "gazo-san: \033[0;1;31m" + msg + ":\033[0m ";
     return "gazo-san: " + msg + ": ";
@@ -77,30 +84,36 @@ static std::string add_color(C &ctx, std::string msg) {
 template <typename C>
 class Fatal {
 public:
-    explicit Fatal(C &ctx) : out(ctx, std::cerr) {
+    explicit Fatal(C& ctx)
+        : out(ctx, std::cerr)
+    {
         out << add_color(ctx, "fatal");
     }
 
-    [[noreturn]] ~Fatal() {
+    [[noreturn]] ~Fatal()
+    {
         out.~SyncOut();
         _exit(1);
     }
 
-    template <class T> Fatal &operator<<(T &&val) {
+    template <class T>
+    Fatal& operator<<(T&& val)
+    {
         out << std::forward<T>(val);
         return *this;
     }
+
 private:
     SyncOut<C> out;
 };
 
 struct TimerRecord {
-    TimerRecord(std::string name, TimerRecord *parent = nullptr);
+    TimerRecord(std::string name, TimerRecord* parent = nullptr);
     void stop();
 
     std::string name;
-    TimerRecord *parent;
-    tbb::concurrent_vector<TimerRecord *> children;
+    TimerRecord* parent;
+    tbb::concurrent_vector<TimerRecord*> children;
     i64 start;
     i64 end;
     i64 user;
@@ -108,51 +121,55 @@ struct TimerRecord {
     bool stopped = false;
 };
 
-void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>> &);
+void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>>&);
 
 template <typename C>
 class Timer {
 public:
-    Timer(C &ctx, std::string name, Timer *parent = nullptr) {
+    Timer(C& ctx, std::string name, Timer* parent = nullptr)
+    {
         record = new TimerRecord(name, parent ? parent->record : nullptr);
         ctx.timer_records.push_back(std::unique_ptr<TimerRecord>(record));
     }
 
-    Timer(const Timer &) = delete;
+    Timer(const Timer&) = delete;
 
-    ~Timer() {
+    ~Timer()
+    {
         record->stop();
     }
 
-    void stop() {
+    void stop()
+    {
         record->stop();
     }
 
 private:
-    TimerRecord *record;
+    TimerRecord* record;
 };
-
 
 template <typename C>
 class MappedFile {
 public:
-    static MappedFile *open(C &ctx, const std::string& path);
-    static MappedFile *must_open(C &ctx, std::string path);
+    static MappedFile* open(C& ctx, const std::string& path);
+    static MappedFile* must_open(C& ctx, std::string path);
 
     ~MappedFile();
 
-    std::string_view get_contents() {
-        return std::string_view((char *) data, size);
+    std::string_view get_contents()
+    {
+        return std::string_view((char*)data, size);
     }
 
     std::string name;
-    u8 *data = nullptr;
+    u8* data = nullptr;
     i64 size = 0;
     i64 mtime = 0;
 };
 
 template <typename C>
-MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
+MappedFile<C>* MappedFile<C>::open(C& ctx, const std::string& path)
+{
     int fd;
     fd = ::open(path.c_str(), O_RDONLY);
 
@@ -160,11 +177,11 @@ MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
         return nullptr;
     }
 
-    struct stat st{};
+    struct stat st { };
     if (fstat(fd, &st) == -1)
         Fatal(ctx) << path << ": fstat failed: " << errno_string();
 
-    auto *mf = new MappedFile;
+    auto* mf = new MappedFile;
     mf->name = path;
     mf->size = st.st_size;
 #ifdef _WIN32
@@ -175,7 +192,7 @@ MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
     mf->mtime = (u64)st.st_mtim.tv_sec * 1000000000 + st.st_mtim.tv_nsec;
 #endif
     if (st.st_size > 0) {
-        mf->data = (u8 *)mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        mf->data = (u8*)mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
         if (mf->data == MAP_FAILED)
             Fatal(ctx) << path << ": mmap failed: " << errno_string();
     }
@@ -184,15 +201,17 @@ MappedFile<C> *MappedFile<C>::open(C &ctx, const std::string& path) {
 }
 
 template <typename C>
-MappedFile<C> *MappedFile<C>::must_open(C &ctx, std::string path) {
-    if (MappedFile *mf = MappedFile::open(ctx, path)) {
+MappedFile<C>* MappedFile<C>::must_open(C& ctx, std::string path)
+{
+    if (MappedFile* mf = MappedFile::open(ctx, path)) {
         return mf;
     }
     Fatal(ctx) << "cannot open " << path << ": " << errno_string();
 }
 
 template <typename C>
-MappedFile<C>::~MappedFile() {
+MappedFile<C>::~MappedFile()
+{
     if (size == 0)
         return;
 
@@ -207,17 +226,21 @@ public:
 
     bool matched = false;
 
-    ImageSegment(cv::Rect area, cv::Mat roi): area(area), roi(roi) {};
-    ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi): area(area), descriptor(std::move(descriptor)), roi(roi) {};
+    ImageSegment(cv::Rect area, cv::Mat roi)
+        : area(area)
+        , roi(roi) {};
+    ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi)
+        : area(area)
+        , descriptor(std::move(descriptor))
+        , roi(roi) {};
 
     cv::Rect rect_from(const cv::Point& upper_left) const;
 };
 
-
 typedef struct Context {
     Context() = default;
 
-    Context(const Context &) = delete;
+    Context(const Context&) = delete;
 
     struct {
         bool color_diagnostics = false;
@@ -252,13 +275,13 @@ typedef struct Context {
 
 i64 get_default_thread_count();
 
-void parse_args(Context &ctx);
-void load_image(Context &ctx);
+void parse_args(Context& ctx);
+void load_image(Context& ctx);
 cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags);
-std::variant<bool, std::string> check_histogram_differential(Context &ctx);
+std::variant<bool, std::string> check_histogram_differential(Context& ctx);
 
-void detect_segments(Context &ctx);
-void save_segments(Context &ctx);
+void detect_segments(Context& ctx);
+void save_segments(Context& ctx);
 bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2);
 void create_diff_image(Context& ctx);
 

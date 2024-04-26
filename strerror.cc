@@ -6,7 +6,8 @@
 
 namespace gazosan {
 
-std::string_view errno_string() {
+std::string_view errno_string()
+{
     static thread_local char buf[200];
     auto _ = strerror_r(errno, buf, sizeof(buf));
     return buf;

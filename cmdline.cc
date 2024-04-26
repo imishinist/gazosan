@@ -21,9 +21,10 @@ Options:
   -h, --help                  report usage information
 )";
 
-void parse_args(Context &ctx) {
+void parse_args(Context& ctx)
+{
     Timer t(ctx, "parse args");
-    std::vector<std::string_view> &args = ctx.cmdline_args;
+    std::vector<std::string_view>& args = ctx.cmdline_args;
 
     int i = 1;
     while (i < args.size()) {
@@ -49,11 +50,11 @@ void parse_args(Context &ctx) {
 
         if (read_flag("-h") || read_flag("--help")) {
             std::cout << "Usage: " << ctx.cmdline_args[0]
-                      << " [options]\n" << helpmsg;
+                      << " [options]\n"
+                      << helpmsg;
             exit(0);
         }
-        if (read_arg("-color-diagnostics") ||
-            read_arg("--color-diagnostics")) {
+        if (read_arg("-color-diagnostics") || read_arg("--color-diagnostics")) {
             ctx.arg.color_diagnostics = true;
         } else if (read_arg("-new")) {
             ctx.arg.new_file = arg;
