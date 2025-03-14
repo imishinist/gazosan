@@ -8,7 +8,7 @@ namespace gazosan {
 
 cv::Rect ImageSegment::rect_from(const cv::Point& upper_left) const
 {
-    return {upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height)};
+    return { upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height) };
 }
 
 void load_image(Context& ctx)

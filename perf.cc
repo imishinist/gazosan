@@ -6,7 +6,7 @@
 namespace gazosan {
 static i64 now_nsec()
 {
-    timespec t{};
+    timespec t {};
     clock_gettime(CLOCK_MONOTONIC, &t);
     return static_cast<i64>(t.tv_sec) * 1000000000 + t.tv_nsec;
 }
@@ -17,7 +17,7 @@ static std::pair<i64, i64> get_usage()
         return static_cast<i64>(t.tv_sec) * 1000000000 + t.tv_usec * 1000;
     };
 
-    rusage ru{};
+    rusage ru {};
     getrusage(RUSAGE_SELF, &ru);
     return { to_nsec(ru.ru_utime), to_nsec(ru.ru_stime) };
 }
@@ -64,7 +64,7 @@ static void print_rec(TimerRecord& rec, const i64 indent) // NOLINT(*-no-recursi
 
 void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>>& records)
 {
-    for (const auto & rec : records)
+    for (const auto& rec : records)
         rec->stop();
 
     for (i64 i = 0; i < records.size(); i++) {

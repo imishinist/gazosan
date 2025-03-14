@@ -134,7 +134,8 @@ public:
         record->stop();
     }
 
-    void stop() const {
+    void stop() const
+    {
         record->stop();
     }
 
@@ -150,8 +151,9 @@ public:
 
     ~MappedFile();
 
-    [[nodiscard]] std::string_view get_contents() const {
-        return {reinterpret_cast<char *>(data), size};
+    [[nodiscard]] std::string_view get_contents() const
+    {
+        return { reinterpret_cast<char*>(data), size };
     }
 
     std::string name;
@@ -168,7 +170,7 @@ MappedFile<C>* MappedFile<C>::open(C& ctx, const std::string& path)
         return nullptr;
     }
 
-    struct stat st { };
+    struct stat st {};
     if (fstat(fd, &st) == -1)
         Fatal(ctx) << path << ": fstat failed: " << errno_string();
 
@@ -220,11 +222,11 @@ public:
 
     ImageSegment(const cv::Rect area, cv::Mat roi)
         : area(area)
-        , roi(std::move(roi)) {};
+        , roi(std::move(roi)) { };
     ImageSegment(const cv::Rect area, cv::Mat descriptor, cv::Mat roi)
         : area(area)
         , descriptor(std::move(descriptor))
-        , roi(std::move(roi)) {};
+        , roi(std::move(roi)) { };
 
     [[nodiscard]] cv::Rect rect_from(const cv::Point& upper_left) const;
 };

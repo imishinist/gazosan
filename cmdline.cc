@@ -40,7 +40,7 @@ void parse_args(Context& ctx)
             }
             return false;
         };
-        auto read_flag = [&](const std::string &name) {
+        auto read_flag = [&](const std::string& name) {
             if (args[i] == name) {
                 i++;
                 return true;
