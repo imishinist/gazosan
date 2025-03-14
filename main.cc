@@ -10,18 +10,19 @@ using namespace gazosan;
 
 namespace gazosan {
 
-i64 get_default_thread_count()
+std::size_t get_default_thread_count()
 {
-    int n = tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
-    return std::min(n, 16);
+    constexpr std::size_t default_thread = 16;
+    const std::size_t n = tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
+    return std::min(n, default_thread);
 }
 
 } // namespace gazosan
 
-int main(int argc, char** argv)
+int main(const int argc, char** argv)
 {
     Context ctx;
-    Timer t_all(ctx, "all");
+    const Timer t_all(ctx, "all");
     for (int i = 0; i < argc; i++)
         ctx.cmdline_args.emplace_back(argv[i]);
     parse_args(ctx);
@@ -30,14 +31,13 @@ int main(int argc, char** argv)
 
     load_image(ctx);
 
-    std::variant<bool, std::string> diff_check = check_histogram_differential(ctx);
+    const std::variant<bool, std::string> diff_check = check_histogram_differential(ctx);
     if (!std::holds_alternative<bool>(diff_check)) {
-        std::string err = std::get<std::string>(diff_check);
+        const std::string err = std::get<std::string>(diff_check);
         Fatal(ctx) << err;
     }
 
-    bool is_same = std::get<bool>(diff_check);
-    if (is_same) {
+    if (std::get<bool>(diff_check)) {
         Fatal(ctx) << "two images are same";
     }
 

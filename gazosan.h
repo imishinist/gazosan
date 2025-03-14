@@ -4,20 +4,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <iostream>
 #include <mutex>
-#include <numeric>
-#include <optional>
-#include <queue>
 #include <sstream>
-#include <stack>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <variant>
 #include <vector>
 
-#include <cstdlib>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -74,7 +69,7 @@ private:
 };
 
 template <typename C>
-static std::string add_color(C& ctx, std::string msg)
+static std::string add_color(C& ctx, const std::string& msg)
 {
     if (ctx.arg.color_diagnostics)
         return "gazo-san: \033[0;1;31m" + msg + ":\033[0m ";
@@ -108,16 +103,16 @@ private:
 };
 
 struct TimerRecord {
-    TimerRecord(std::string name, TimerRecord* parent = nullptr);
+    TimerRecord(std::string name, TimerRecord* parent);
     void stop();
 
     std::string name;
     TimerRecord* parent;
     tbb::concurrent_vector<TimerRecord*> children;
     i64 start;
-    i64 end;
-    i64 user;
-    i64 sys;
+    i64 end = 0;
+    i64 user = 0;
+    i64 sys = 0;
     bool stopped = false;
 };
 
@@ -139,8 +134,7 @@ public:
         record->stop();
     }
 
-    void stop()
-    {
+    void stop() const {
         record->stop();
     }
 
@@ -156,9 +150,8 @@ public:
 
     ~MappedFile();
 
-    std::string_view get_contents()
-    {
-        return std::string_view((char*)data, size);
+    [[nodiscard]] std::string_view get_contents() const {
+        return {reinterpret_cast<char *>(data), size};
     }
 
     std::string name;
@@ -170,9 +163,7 @@ public:
 template <typename C>
 MappedFile<C>* MappedFile<C>::open(C& ctx, const std::string& path)
 {
-    int fd;
-    fd = ::open(path.c_str(), O_RDONLY);
-
+    const int fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
         return nullptr;
     }
@@ -187,12 +178,12 @@ MappedFile<C>* MappedFile<C>::open(C& ctx, const std::string& path)
 #ifdef _WIN32
     // not supported
 #elif defined(__APPLE__)
-    mf->mtime = (u64)st.st_mtimespec.tv_sec * 1000000000 + st.st_mtimespec.tv_nsec;
+    mf->mtime = static_cast<u64>(st.st_mtimespec.tv_sec) * 1000000000 + st.st_mtimespec.tv_nsec;
 #else
-    mf->mtime = (u64)st.st_mtim.tv_sec * 1000000000 + st.st_mtim.tv_nsec;
+    mf->mtime = static_cast<u64>(st.st_mtim.tv_sec) * 1000000000 + st.st_mtim.tv_nsec;
 #endif
     if (st.st_size > 0) {
-        mf->data = (u8*)mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        mf->data = static_cast<u8*>(mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
         if (mf->data == MAP_FAILED)
             Fatal(ctx) << path << ": mmap failed: " << errno_string();
     }
@@ -207,6 +198,7 @@ MappedFile<C>* MappedFile<C>::must_open(C& ctx, std::string path)
         return mf;
     }
     Fatal(ctx) << "cannot open " << path << ": " << errno_string();
+    return nullptr;
 }
 
 template <typename C>
@@ -226,15 +218,15 @@ public:
 
     bool matched = false;
 
-    ImageSegment(cv::Rect area, cv::Mat roi)
+    ImageSegment(const cv::Rect area, cv::Mat roi)
         : area(area)
-        , roi(roi) {};
-    ImageSegment(cv::Rect area, cv::Mat descriptor, cv::Mat roi)
+        , roi(std::move(roi)) {};
+    ImageSegment(const cv::Rect area, cv::Mat descriptor, cv::Mat roi)
         : area(area)
         , descriptor(std::move(descriptor))
-        , roi(roi) {};
+        , roi(std::move(roi)) {};
 
-    cv::Rect rect_from(const cv::Point& upper_left) const;
+    [[nodiscard]] cv::Rect rect_from(const cv::Point& upper_left) const;
 };
 
 typedef struct Context {
@@ -273,7 +265,7 @@ typedef struct Context {
     tbb::concurrent_vector<ImageSegment> old_segments;
 } Context;
 
-i64 get_default_thread_count();
+std::size_t get_default_thread_count();
 
 void parse_args(Context& ctx);
 void load_image(Context& ctx);
@@ -281,8 +273,8 @@ cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flag
 std::variant<bool, std::string> check_histogram_differential(Context& ctx);
 
 void detect_segments(Context& ctx);
-void save_segments(Context& ctx);
-bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2);
+void save_segments(const Context& ctx);
+bool descriptor_match(const Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2);
 void create_diff_image(Context& ctx);
 
 } // namespace gazosan

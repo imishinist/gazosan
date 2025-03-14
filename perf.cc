@@ -1,33 +1,29 @@
 #include "gazosan.h"
 
-#include <functional>
-#include <iomanip>
-#include <ios>
-
 #include <sys/resource.h>
 #include <sys/time.h>
 
 namespace gazosan {
 static i64 now_nsec()
 {
-    struct timespec t;
+    timespec t{};
     clock_gettime(CLOCK_MONOTONIC, &t);
-    return (i64)t.tv_sec * 1000000000 + t.tv_nsec;
+    return static_cast<i64>(t.tv_sec) * 1000000000 + t.tv_nsec;
 }
 
 static std::pair<i64, i64> get_usage()
 {
-    auto to_nsec = [](struct timeval t) -> i64 {
-        return (i64)t.tv_sec * 1000000000 + t.tv_usec * 1000;
+    auto to_nsec = [](const struct timeval t) -> i64 {
+        return static_cast<i64>(t.tv_sec) * 1000000000 + t.tv_usec * 1000;
     };
 
-    struct rusage ru;
+    rusage ru{};
     getrusage(RUSAGE_SELF, &ru);
     return { to_nsec(ru.ru_utime), to_nsec(ru.ru_stime) };
 }
 
 TimerRecord::TimerRecord(std::string name, TimerRecord* parent)
-    : name(name)
+    : name(std::move(name))
     , parent(parent)
 {
     start = now_nsec();
@@ -42,25 +38,23 @@ void TimerRecord::stop()
         return;
     stopped = true;
 
-    i64 user2;
-    i64 sys2;
-    std::tie(user2, sys2) = get_usage();
+    auto [user2, sys2] = get_usage();
 
     end = now_nsec();
     user = user2 - user;
     sys = sys2 - sys;
 }
 
-static void print_rec(TimerRecord& rec, i64 indent)
+static void print_rec(TimerRecord& rec, const i64 indent) // NOLINT(*-no-recursion)
 {
-    printf(" % 8.3f % 8.3f % 8.3f  %s%s\n",
-        ((double)rec.user / 1000000000),
-        ((double)rec.sys / 1000000000),
-        (((double)rec.end - rec.start) / 1000000000),
+    printf(" %8.3f %8.3f %8.3f  %s%s\n",
+        static_cast<double>(rec.user) / 1000000000,
+        static_cast<double>(rec.sys) / 1000000000,
+        (static_cast<double>(rec.end) - static_cast<double>(rec.start)) / 1000000000,
         std::string(indent * 2, ' ').c_str(),
         rec.name.c_str());
 
-    std::sort(rec.children.begin(), rec.children.end(), [](TimerRecord* a, TimerRecord* b) {
+    std::ranges::sort(rec.children, [](const TimerRecord* a, const TimerRecord* b) {
         return a->start < b->start;
     });
 
@@ -70,8 +64,8 @@ static void print_rec(TimerRecord& rec, i64 indent)
 
 void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>>& records)
 {
-    for (i64 i = records.size() - 1; i >= 0; i--)
-        records[i]->stop();
+    for (const auto & rec : records)
+        rec->stop();
 
     for (i64 i = 0; i < records.size(); i++) {
         TimerRecord& inner = *records[i];

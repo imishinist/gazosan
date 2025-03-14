@@ -6,7 +6,7 @@
 
 namespace gazosan {
 
-static const char helpmsg[] = R"(
+static constexpr char help_msg[] = R"(
 Options:
   -new <FILE>                 new image file path
   -old <FILE>                 old image file path
@@ -30,7 +30,7 @@ void parse_args(Context& ctx)
     while (i < args.size()) {
         std::string_view arg;
 
-        auto read_arg = [&](std::string name) {
+        auto read_arg = [&](const std::string& name) {
             if (args[i] == name) {
                 if (args.size() <= i + 1)
                     Fatal(ctx) << "option -" << name << ": argument missing";
@@ -40,7 +40,7 @@ void parse_args(Context& ctx)
             }
             return false;
         };
-        auto read_flag = [&](std::string name) {
+        auto read_flag = [&](const std::string &name) {
             if (args[i] == name) {
                 i++;
                 return true;
@@ -51,7 +51,7 @@ void parse_args(Context& ctx)
         if (read_flag("-h") || read_flag("--help")) {
             std::cout << "Usage: " << ctx.cmdline_args[0]
                       << " [options]\n"
-                      << helpmsg;
+                      << help_msg;
             exit(0);
         }
         if (read_arg("-color-diagnostics") || read_arg("--color-diagnostics")) {
@@ -83,7 +83,7 @@ void parse_args(Context& ctx)
     if (ctx.arg.old_file.empty())
         Fatal(ctx) << "\"-old\" option is required";
     if (ctx.arg.thread_count == 0)
-        ctx.arg.thread_count = get_default_thread_count();
+        ctx.arg.thread_count = static_cast<i64>(get_default_thread_count());
     if (ctx.arg.bin_threshold == 0)
         ctx.arg.bin_threshold = 200;
     if (ctx.arg.output_name.empty()) {

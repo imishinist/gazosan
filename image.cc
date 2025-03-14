@@ -8,7 +8,7 @@ namespace gazosan {
 
 cv::Rect ImageSegment::rect_from(const cv::Point& upper_left) const
 {
-    return cv::Rect(upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height));
+    return {upper_left, cv::Point(upper_left.x + area.width, upper_left.y + area.height)};
 }
 
 void load_image(Context& ctx)
@@ -16,7 +16,7 @@ void load_image(Context& ctx)
     Timer t(ctx, "load image");
 
     tbb::task_group tg;
-    tg.run([&]() {
+    tg.run([&] {
         if (!ctx.arg.new_file.empty()) {
             ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
             ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
@@ -24,7 +24,7 @@ void load_image(Context& ctx)
         }
     });
 
-    tg.run([&]() {
+    tg.run([&] {
         if (!ctx.arg.old_file.empty()) {
             ctx.old_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.old_file));
             ctx.old_color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
@@ -34,9 +34,9 @@ void load_image(Context& ctx)
     tg.wait();
 }
 
-cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, int flags = cv::IMREAD_UNCHANGED)
+cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, const int flags = cv::IMREAD_UNCHANGED)
 {
-    return cv::imdecode(cv::Mat(1, mapped_file.size, CV_8UC1, mapped_file.data), flags);
+    return cv::imdecode(cv::Mat(1, static_cast<int>(mapped_file.size), CV_8UC1, mapped_file.data), flags);
 }
 
 std::variant<bool, std::string> check_histogram_differential(Context& ctx)
@@ -48,10 +48,10 @@ std::variant<bool, std::string> check_histogram_differential(Context& ctx)
         cv::Mat hsv_mat, output;
         cv::cvtColor(color_mat, hsv_mat, cv::COLOR_BGR2HSV);
 
-        int channels[] = { 0, 1 };
+        constexpr int channels[] = { 0, 1 };
         float h_ranges[] = { 0, 180 };
         float s_ranges[] = { 0, 256 };
-        const int hist_size[] = { 256, 256 };
+        constexpr int hist_size[] = { 256, 256 };
         const float* ranges[] = { h_ranges, s_ranges };
 
         cv::calcHist(&hsv_mat, 1, channels, cv::Mat(), output, 2, hist_size, ranges, true, false);
@@ -63,8 +63,8 @@ std::variant<bool, std::string> check_histogram_differential(Context& ctx)
         return "failed to decode image file";
     }
 
-    cv::Mat hist_old_mat = preprocess_image(ctx.old_color_mat);
-    cv::Mat hist_new_mat = preprocess_image(ctx.new_color_mat);
+    const cv::Mat hist_old_mat = preprocess_image(ctx.old_color_mat);
+    const cv::Mat hist_new_mat = preprocess_image(ctx.new_color_mat);
     return cv::compareHist(hist_old_mat, hist_new_mat, 1) - 0.00001 <= 1e-13;
 }
 
@@ -122,11 +122,11 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
     t_image.stop();
 
     // overwrite markers
-    auto bfs = [&](int sx, int sy, auto&& bfs) -> std::optional<cv::Rect> {
+    auto bfs = [&](int sx, int sy, auto&&) -> std::optional<cv::Rect> {
         cv::Point minP(sx, sy), maxP(sx, sy);
 
         std::queue<std::pair<int, int>> Q;
-        Q.push(std::make_pair(sx, sy));
+        Q.emplace(sx, sy);
         while (!Q.empty()) {
             auto [x, y] = Q.front();
             Q.pop();
@@ -144,9 +144,8 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
                     if (ny < 0 || ny >= markers.rows)
                         continue;
 
-                    int label = markers.at<int>(ny, nx);
                     // border: -1, background: 1, already processed: 0
-                    if (label <= 1)
+                    if (markers.at<int>(ny, nx) <= 1)
                         continue;
                     // mark processed
                     markers.at<int>(ny, nx) = 0;
@@ -156,11 +155,11 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
                     maxP.x = std::max(maxP.x, nx);
                     maxP.y = std::max(maxP.y, ny);
 
-                    Q.push(std::make_pair(nx, ny));
+                    Q.emplace(nx, ny);
                 }
             }
         }
-        if ((minP.x == sx && minP.y == sy) && (maxP.x == sx && maxP.y == sy)) {
+        if (minP.x == sx && minP.y == sy && maxP.x == sx && maxP.y == sy) {
             return std::nullopt;
         }
         return cv::Rect(minP, maxP);
@@ -172,8 +171,7 @@ std::vector<cv::Rect> split_segments(Context& ctx, const cv::Mat& gray_mat, cons
 
     for (int y = 0; y < markers.rows; y++) {
         for (int x = 0; x < markers.cols; x++) {
-            int label = markers.at<int>(y, x);
-            if (label <= 1)
+            if (markers.at<int>(y, x) <= 1)
                 continue;
 
             if (auto rect = bfs(x, y, bfs))
@@ -206,19 +204,16 @@ void detect_segments(Context& ctx)
     auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat,
                          tbb::concurrent_vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect", &t);
-        auto segment_tmp = split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold);
-
-        for (auto segment : segment_tmp) {
+        for (auto segment : split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold)) {
             auto roi = gray_mat(segment);
             result.emplace_back(segment, roi);
         }
 
         Timer t4(ctx, "compute descriptors", &t2);
         tbb::parallel_for_each(result, [&](ImageSegment& segment) {
-            if (auto desc = compute_descriptor(segment.roi))
+            if (const auto desc = compute_descriptor(segment.roi))
                 segment.descriptor = *desc;
         });
-        t4.stop();
     };
 
     tbb::task_group tg;
@@ -227,7 +222,7 @@ void detect_segments(Context& ctx)
     tg.wait();
 }
 
-void save_segments(Context& ctx)
+void save_segments(const Context& ctx)
 {
     auto do_save = [&](const std::string& prefix, const cv::Mat& base_mat,
                        const tbb::concurrent_vector<ImageSegment>& segments) {
@@ -243,18 +238,18 @@ void save_segments(Context& ctx)
     do_save("new", ctx.new_color_mat, ctx.new_segments);
 }
 
-bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2)
+bool descriptor_match(const Context& ctx, const cv::Mat& descriptor1, const cv::Mat& descriptor2)
 {
-    auto matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+    const auto matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
 
-    std::vector<cv::DMatch> matched, match12, match21;
+    std::vector<cv::DMatch> match12, match21;
     matcher->match(descriptor1, descriptor2, match12);
     matcher->match(descriptor2, descriptor1, match21);
 
     if (ctx.arg.cross_check) {
+        std::vector<cv::DMatch> matched;
         for (auto forward : match12) {
-            cv::DMatch backward = match21[forward.trainIdx];
-            if (backward.trainIdx == forward.queryIdx)
+            if (const cv::DMatch backward = match21[forward.trainIdx]; backward.trainIdx == forward.queryIdx)
                 matched.push_back(forward);
         }
 
@@ -266,7 +261,7 @@ bool descriptor_match(Context& ctx, const cv::Mat& descriptor1, const cv::Mat& d
     std::sort(match21.begin(), match21.end());
 
     // descriptor1 -> descriptor2 match or descriptor2 -> descriptor1 match
-    float threshold = 1.0f;
+    constexpr float threshold = 1.0f;
     return (!match12.empty() && match12[match12.size() / 2].distance <= threshold) || (!match21.empty() && match21[match21.size() / 2].distance <= threshold);
 }
 
@@ -275,7 +270,7 @@ void create_diff_image(Context& ctx)
     Timer t(ctx, "create diff image");
 
     cv::Mat result;
-    cv::Mat temp[] = { ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat };
+    const cv::Mat temp[] = { ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat };
     cv::merge(temp, 3, result);
 
     tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
@@ -295,8 +290,8 @@ void create_diff_image(Context& ctx)
             cv::minMaxLoc(ret, nullptr, nullptr, &min_point, nullptr);
             // Note: パーツのマッチングから対応する位置関係を取得できないか？
 
-            auto area = image_segment2.area;
-            auto rect = image_segment2.rect_from(min_point);
+            const auto area = image_segment2.area;
+            const auto rect = image_segment2.rect_from(min_point);
             cv::rectangle(result, rect, CV_RGB(255, 0, 0), 1);
             for (int i = 0; i < rect.height; i++) {
                 for (int j = 0; j < rect.width; j++) {
@@ -313,12 +308,12 @@ void create_diff_image(Context& ctx)
     Timer t2(ctx, "write");
     cv::imwrite(ctx.arg.output_name + "_diff.png", result);
 
-    auto draw_not_matched = [&](cv::Mat result, const tbb::concurrent_vector<ImageSegment>& segments) {
+    auto draw_not_matched = [&](cv::Mat ret, const tbb::concurrent_vector<ImageSegment>& segments) {
         tbb::parallel_for_each(segments, [&](const ImageSegment& image_segment) {
             if (image_segment.matched)
                 return;
 
-            cv::rectangle(result, image_segment.area, CV_RGB(0, 255, 0), 2);
+            cv::rectangle(ret, image_segment.area, CV_RGB(0, 255, 0), 2);
         });
     };
 
@@ -326,12 +321,12 @@ void create_diff_image(Context& ctx)
         Timer t3(ctx, "create added and deleted image");
         tbb::task_group tg;
         tg.run([&]() {
-            cv::Mat deleted = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
+            const cv::Mat deleted = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
             draw_not_matched(deleted, ctx.old_segments);
             cv::imwrite(ctx.arg.output_name + "_delete.png", deleted);
         });
         tg.run([&]() {
-            cv::Mat added = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
+            const cv::Mat added = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
             draw_not_matched(added, ctx.new_segments);
             cv::imwrite(ctx.arg.output_name + "_add.png", added);
         });
