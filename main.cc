@@ -4,8 +4,6 @@
 
 #include "gazosan.h"
 
-#include <tbb/global_control.h>
-
 using namespace gazosan;
 
 namespace gazosan {
@@ -13,7 +11,11 @@ namespace gazosan {
 std::size_t get_default_thread_count()
 {
     constexpr std::size_t default_thread = 16;
+#ifdef ENABLE_PARALLEL
     const std::size_t n = tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism);
+#else
+    constexpr std::size_t n = 16;
+#endif
     return std::min(n, default_thread);
 }
 
@@ -27,7 +29,9 @@ int main(const int argc, char** argv)
         ctx.cmdline_args.emplace_back(argv[i]);
     parse_args(ctx);
 
+#ifdef ENABLE_PARALLEL
     tbb::global_control tbb_cont(tbb::global_control::max_allowed_parallelism, ctx.arg.thread_count);
+#endif
 
     load_image(ctx);
 

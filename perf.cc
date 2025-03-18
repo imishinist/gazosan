@@ -62,7 +62,7 @@ static void print_rec(TimerRecord& rec, const i64 indent) // NOLINT(*-no-recursi
         print_rec(*child, indent + 1);
 }
 
-void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>>& records)
+void print_timer_records(vector<std::unique_ptr<TimerRecord>>& records)
 {
     for (const auto& rec : records)
         rec->stop();

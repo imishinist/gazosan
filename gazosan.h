@@ -22,9 +22,18 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#ifdef ENABLE_PARALLEL
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_for_each.h>
+#include <tbb/global_control.h>
 #include <tbb/tbb.h>
+
+template<typename T>
+using vector = tbb::concurrent_vector<T>;
+#else
+template<typename T>
+using vector = std::vector<T>;
+#endif
 
 namespace gazosan {
 
@@ -108,7 +117,7 @@ struct TimerRecord {
 
     std::string name;
     TimerRecord* parent;
-    tbb::concurrent_vector<TimerRecord*> children;
+    vector<TimerRecord*> children;
     i64 start;
     i64 end = 0;
     i64 user = 0;
@@ -116,7 +125,7 @@ struct TimerRecord {
     bool stopped = false;
 };
 
-void print_timer_records(tbb::concurrent_vector<std::unique_ptr<TimerRecord>>&);
+void print_timer_records(vector<std::unique_ptr<TimerRecord>>&);
 
 template <typename C>
 class Timer {
@@ -250,7 +259,8 @@ typedef struct Context {
         bool perf = false;
     } arg;
     std::vector<std::string_view> cmdline_args;
-    tbb::concurrent_vector<std::unique_ptr<TimerRecord>> timer_records;
+
+    vector<std::unique_ptr<TimerRecord>> timer_records;
 
     cv::Ptr<cv::AKAZE> algorithm = cv::AKAZE::create();
 
@@ -263,8 +273,8 @@ typedef struct Context {
     cv::Mat new_gray_mat;
     cv::Mat old_gray_mat;
 
-    tbb::concurrent_vector<ImageSegment> new_segments;
-    tbb::concurrent_vector<ImageSegment> old_segments;
+    vector<ImageSegment> new_segments;
+    vector<ImageSegment> old_segments;
 } Context;
 
 std::size_t get_default_thread_count();

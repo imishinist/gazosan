@@ -15,23 +15,29 @@ void load_image(Context& ctx)
 {
     Timer t(ctx, "load image");
 
+#ifdef ENABLE_PARALLEL
     tbb::task_group tg;
     tg.run([&] {
+#endif
         if (!ctx.arg.new_file.empty()) {
             ctx.new_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.new_file));
             ctx.new_color_mat = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
             cv::cvtColor(ctx.new_color_mat, ctx.new_gray_mat, cv::COLOR_BGR2GRAY);
         }
+#ifdef ENABLE_PARALLEL
     });
 
     tg.run([&] {
+#endif
         if (!ctx.arg.old_file.empty()) {
             ctx.old_file.reset(MappedFile<Context>::must_open(ctx, ctx.arg.old_file));
             ctx.old_color_mat = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
             cv::cvtColor(ctx.old_color_mat, ctx.old_gray_mat, cv::COLOR_BGR2GRAY);
         }
+#ifdef ENABLE_PARALLEL
     });
     tg.wait();
+#endif
 }
 
 cv::Mat decode_from_mapped_file(const MappedFile<Context>& mapped_file, const int flags = cv::IMREAD_UNCHANGED)
@@ -201,8 +207,7 @@ void detect_segments(Context& ctx)
         return descriptor;
     };
 
-    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat,
-                         tbb::concurrent_vector<ImageSegment>& result) {
+    auto do_detect = [&](const cv::Mat& gray_mat, const cv::Mat& color_mat, vector<ImageSegment>& result) {
         Timer t2(ctx, "do detect", &t);
         for (auto segment : split_segments(ctx, gray_mat, color_mat, ctx.arg.bin_threshold)) {
             auto roi = gray_mat(segment);
@@ -210,22 +215,33 @@ void detect_segments(Context& ctx)
         }
 
         Timer t4(ctx, "compute descriptors", &t2);
+#ifdef ENABLE_PARALLEL
         tbb::parallel_for_each(result, [&](ImageSegment& segment) {
             if (const auto desc = compute_descriptor(segment.roi))
                 segment.descriptor = *desc;
         });
+#else
+        for (auto &segment : result) {
+            if (const auto desc = compute_descriptor(segment.roi))
+                segment.descriptor = *desc;
+        }
+#endif
     };
 
+#ifdef ENABLE_PARALLEL
     tbb::task_group tg;
     tg.run([&]() { do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments); });
     tg.run([&]() { do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments); });
     tg.wait();
+#else
+    do_detect(ctx.old_gray_mat, ctx.old_color_mat, ctx.old_segments);
+    do_detect(ctx.new_gray_mat, ctx.new_color_mat, ctx.new_segments);
+#endif
 }
 
 void save_segments(const Context& ctx)
 {
-    auto do_save = [&](const std::string& prefix, const cv::Mat& base_mat,
-                       const tbb::concurrent_vector<ImageSegment>& segments) {
+    auto do_save = [&](const std::string& prefix, const cv::Mat& base_mat, const vector<ImageSegment>& segments) {
         for (int i = 0; const auto& image_segment : segments) {
             i++;
 
@@ -273,10 +289,18 @@ void create_diff_image(Context& ctx)
     const cv::Mat temp[] = { ctx.old_gray_mat, ctx.old_gray_mat, ctx.old_gray_mat };
     cv::merge(temp, 3, result);
 
+#ifdef ENABLE_PARALLEL
     tbb::parallel_for_each(ctx.old_segments, [&](ImageSegment& image_segment1) {
+#else
+    for (auto image_segment1 : ctx.old_segments) {
+#endif
         if (image_segment1.descriptor.empty() || image_segment1.matched)
             return;
+#ifdef ENABLE_PARALLEL
         tbb::parallel_for_each(ctx.new_segments, [&](ImageSegment& image_segment2) {
+#else
+        for (auto image_segment2: ctx.new_segments) {
+#endif
             if (image_segment2.descriptor.empty() || image_segment2.matched || !descriptor_match(ctx, image_segment1.descriptor, image_segment2.descriptor))
                 return;
 
@@ -303,34 +327,53 @@ void create_diff_image(Context& ctx)
                     }
                 }
             }
+#ifdef ENABLE_PARALLEL
         });
     });
+#else
+        }
+    }
+#endif
     Timer t2(ctx, "write");
     cv::imwrite(ctx.arg.output_name + "_diff.png", result);
 
-    auto draw_not_matched = [&](cv::Mat ret, const tbb::concurrent_vector<ImageSegment>& segments) {
+    auto draw_not_matched = [&](cv::Mat ret, const vector<ImageSegment>& segments) {
+#ifdef ENABLE_PARALLEL
         tbb::parallel_for_each(segments, [&](const ImageSegment& image_segment) {
+#else
+        for (const auto& image_segment : segments) {
+#endif
             if (image_segment.matched)
                 return;
 
             cv::rectangle(ret, image_segment.area, CV_RGB(0, 255, 0), 2);
+#ifdef ENABLE_PARALLEL
         });
+#else
+        }
+#endif
     };
 
     if (ctx.arg.create_change_image) {
         Timer t3(ctx, "create added and deleted image");
+#ifdef ENABLE_PARALLEL
         tbb::task_group tg;
         tg.run([&]() {
+#endif
             const cv::Mat deleted = decode_from_mapped_file(*ctx.old_file, cv::IMREAD_COLOR);
             draw_not_matched(deleted, ctx.old_segments);
             cv::imwrite(ctx.arg.output_name + "_delete.png", deleted);
+#ifdef ENABLE_PARALLEL
         });
         tg.run([&]() {
+#endif
             const cv::Mat added = decode_from_mapped_file(*ctx.new_file, cv::IMREAD_COLOR);
             draw_not_matched(added, ctx.new_segments);
             cv::imwrite(ctx.arg.output_name + "_add.png", added);
+#ifdef ENABLE_PARALLEL
         });
         tg.wait();
+#endif
     }
 }
 
